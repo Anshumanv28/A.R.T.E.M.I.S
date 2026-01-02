@@ -89,6 +89,14 @@ Pipfile.lock
 # poetry
 poetry.lock
 
+# uv
+uv.lock
+
+# Note: requirements.lock is NOT ignored - it should be committed
+# Workflow:
+# - Developers: Edit requirements.txt, then run `uv pip compile requirements.txt -o requirements.lock`
+# - Users: Install from lock file with `uv pip install -r requirements.lock`
+
 # pdm
 .pdm.toml
 
@@ -111,6 +119,7 @@ ENV/
 env.bak/
 venv.bak/
 .conda/
+artemis-env/
 
 # Spyder project settings
 .spyderproject
@@ -153,6 +162,8 @@ logs/
 *.sqlite
 *.sqlite3
 ROADMAP.md
+dev_help.txt
+dataset/
 
 # Qdrant
 qdrant_data/

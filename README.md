@@ -33,10 +33,13 @@ A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** desi
 3. **Multimodal Inputs** - Text, voice (LiveKit), vision
 4. **Semantic Memory** - Short-term conversation context
 
+**Note**: Data chunking is intentionally skipped in MVP since we're working with small datasets. Chunking will be added in Phase 2 for handling larger datasets efficiently.
+
 ## 🚀 Coming Soon (Phase 2-3)
 
 - **Dynamic Tool Registry** - Documentation-driven tool registration (YAML/OpenAPI). Tools automatically registered/unregistered as they're added/removed on the backend
 - **Advanced Vector Memory** - Qdrant semantic search for long-term context
+- **Data Chunking** - Intelligent text chunking for large datasets e.g faqs, reviews, menu (currently skipped for small datasets)
 - **Frontend Dashboard** - React interface with tool selection (checkboxes/selectable boxes), configuration, memory management, and page navigation
 - **FastAPI Backend APIs** - Production-ready REST APIs for tools and memory
 - **Fine-Tuned Custom LLM** - Custom Llama3 70B model fine-tuned for your use-cases
