@@ -165,7 +165,9 @@ logs/
 ROADMAP.md
 dev_help.txt
 dataset/
+artemis_data/  # Centralized data folder (logs, generated docs, etc.)
 RAG/
+docs/  # Generated documents (deleted after ingestion)
 
 # Qdrant
 qdrant_data/

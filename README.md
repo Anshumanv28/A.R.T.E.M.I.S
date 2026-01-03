@@ -258,6 +258,154 @@ parameters:
 
 ---
 
+## 🔌 Document Converters
+
+A.R.T.E.M.I.S. provides flexible document conversion with three levels of control: auto-detect (zero config), built-in schemas, and custom schemas.
+
+### 1. Auto-Detect Mode (Zero Config)
+
+Works with any CSV - automatically uses all column headers:
+
+```python
+from artemis.rag import csv_to_documents
+
+# Works with any CSV structure - auto-detects headers (in-memory, default)
+docs, metadata = csv_to_documents("any_file.csv")
+```
+
+**What it does:**
+
+- Takes all columns from your CSV
+- Uses column names as labels
+- Produces documents like: `"CustomerID: 123. City: Delhi. Plan: Premium. ..."`
+- Returns in-memory lists (fast, simple)
+- Perfect for quick experiments, no configuration needed
+
+### 2. Built-in Schemas (Optimized)
+
+Use the pre-built RESTAURANT schema for optimized restaurant data:
+
+```python
+from artemis.rag import csv_to_documents, DocumentSchema
+
+# Uses optimized restaurant converter with proper field handling
+docs, metadata = csv_to_documents("restaurants.csv", DocumentSchema.RESTAURANT)
+```
+
+The RESTAURANT schema includes:
+
+- Smart field normalization (Yes/No handling)
+- Location string formatting
+- Rating and cost formatting
+- Optimized metadata for filtering
+
+### 3. Custom Schemas (Full Control)
+
+Define your own schema converter to control exactly which columns are used, how they're labeled, and how documents are formatted:
+
+```python
+from artemis.rag.document_converter import register_schema, DocumentSchema, csv_to_documents, format_doc
+import pandas as pd
+
+# Define your custom schema
+class MySchema(DocumentSchema):
+    CUSTOMER = "customer"
+
+@register_schema(MySchema.CUSTOMER)
+def convert_customers(csv_path: str):
+    """Custom converter with selected columns and formatting."""
+    df = pd.read_csv(csv_path)
+    docs, metadata = [], []
+
+    for _, row in df.iterrows():
+        # Pick only the columns you want
+        # Control labels and phrasing
+        doc_parts = {
+            "Customer": str(row.get("name", "")).strip(),
+            "City": str(row.get("city", "")).strip(),
+            "Plan": str(row.get("plan", "")).strip(),
+        }
+        doc = format_doc(doc_parts)
+        docs.append(doc)
+
+        # Build whatever metadata you need for filtering
+        metadata.append({
+            "id": row.get("id"),
+            "city": row.get("city"),
+            "plan": row.get("plan")
+        })
+
+    return docs, metadata
+
+# Use your custom schema
+docs, meta = csv_to_documents("customers.csv", MySchema.CUSTOMER)
+```
+
+**What you control:**
+
+- ✅ **Which columns** to include (skip irrelevant ones)
+- ✅ **How to label** them (custom field names)
+- ✅ **How to format** (combine fields, add context)
+- ✅ **Metadata structure** (what to store for filtering)
+
+### When to Use Each Approach
+
+| Approach            | Use When                                                           | Example                                                          |
+| ------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| **Auto-detect**     | Quick experiments, unknown CSV structure                           | `csv_to_documents("data.csv")`                                   |
+| **Built-in schema** | Using restaurant data                                              | `csv_to_documents("restaurants.csv", DocumentSchema.RESTAURANT)` |
+| **Custom schema**   | Need specific columns, custom formatting, or domain-specific logic | Register your own converter                                      |
+
+### Advanced: File-Based Storage (For Testing/Large Datasets)
+
+By default, documents are returned **in-memory** (fast and simple). For unit testing or very large datasets, you can save documents to files:
+
+```python
+# File-based mode (saves to artemis_data/docs/ folder)
+doc_paths, metadata_path = csv_to_documents("data.csv", save_to_disk=True)
+
+# Files are automatically deleted after ingestion by retriever
+retriever.add_documents(doc_paths, metadata_path)
+```
+
+**Or set via environment variable:**
+
+```bash
+# In .env file or export
+ARTEMIS_SAVE_DOCS_TO_DISK=true
+```
+
+**When to use file-based mode:**
+
+- Unit testing (can inspect files before ingestion)
+- Very large datasets (avoids memory issues)
+- Debugging (files remain if ingestion fails)
+
+**Default:** In-memory mode (faster for small/medium datasets)
+
+**Note:** Generated files are stored in `artemis_data/docs/` and logs in `artemis_data/logs/`. These folders are automatically created and ignored by Git.
+
+### The format_doc Helper
+
+All converters use the `format_doc()` helper for consistent formatting:
+
+```python
+from artemis.rag import format_doc
+
+doc_parts = {
+    "Product": "Laptop",
+    "Price": "$999",
+    "In Stock": "Yes",
+}
+
+document = format_doc(doc_parts)
+# Returns: "Product: Laptop. Price: $999. In Stock: Yes."
+```
+
+**Note:** Auto-detect works great for MVP and quick experiments. Custom schemas give you full control when you need optimized document quality for production use.
+
+---
+
 ## 🎓 Examples
 
 ### Example 1: Restaurant Assistant

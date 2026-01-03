@@ -14,10 +14,12 @@ from typing import Optional
 
 # Try to import colorama for colored console output
 try:
-    from colorama import init, Fore, Style
-    init(autoreset=True)  # Auto-reset colors after each print
+    import colorama
+    from colorama import Fore, Style
+    # Initialize colorama (only needed on Windows, but safe to call on all platforms)
+    colorama.init(autoreset=True, strip=False)
     COLORAMA_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError) as e:
     COLORAMA_AVAILABLE = False
     # Define dummy color constants if colorama not available
     class Fore:
@@ -30,12 +32,16 @@ except ImportError:
         RESET = ""
     class Style:
         RESET_ALL = ""
+        BRIGHT = ""
 
 # Default log level
 DEFAULT_LOG_LEVEL = logging.INFO
 
-# Log directory in user home
-LOG_DIR = Path.home() / ".artemis" / "logs"
+# Import path utilities
+from artemis.utils.paths import get_logs_dir
+
+# Log directory in project data folder
+LOG_DIR = get_logs_dir()
 LOG_FILE = LOG_DIR / "artemis.log"
 
 # Maximum log file size (10MB)
