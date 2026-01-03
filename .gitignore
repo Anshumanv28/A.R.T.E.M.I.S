@@ -112,6 +112,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.example
 .venv
 env/
 venv/
@@ -164,6 +165,7 @@ logs/
 ROADMAP.md
 dev_help.txt
 dataset/
+RAG/
 
 # Qdrant
 qdrant_data/

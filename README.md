@@ -40,6 +40,11 @@ A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** desi
 - **Dynamic Tool Registry** - Documentation-driven tool registration (YAML/OpenAPI). Tools automatically registered/unregistered as they're added/removed on the backend
 - **Advanced Vector Memory** - Qdrant semantic search for long-term context
 - **Data Chunking** - Intelligent text chunking for large datasets e.g faqs, reviews, menu (currently skipped for small datasets)
+- **Document Schema Converters** - Additional schema types for different use cases:
+  - ✅ **RESTAURANT** - Available now (MVP)
+  - 🔜 **TRAVEL** - Travel planning (cities, attractions, hotels) - Phase 2
+  - 🔜 **SUPPORT** - FAQ/support tickets - Phase 2
+  - 🔜 **ECOMMERCE** - Product catalogs - Phase 2
 - **Frontend Dashboard** - React interface with tool selection (checkboxes/selectable boxes), configuration, memory management, and page navigation
 - **FastAPI Backend APIs** - Production-ready REST APIs for tools and memory
 - **Fine-Tuned Custom LLM** - Custom Llama3 70B model fine-tuned for your use-cases
