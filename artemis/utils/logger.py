@@ -12,6 +12,25 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
+# Try to import colorama for colored console output
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)  # Auto-reset colors after each print
+    COLORAMA_AVAILABLE = True
+except ImportError:
+    COLORAMA_AVAILABLE = False
+    # Define dummy color constants if colorama not available
+    class Fore:
+        RED = ""
+        YELLOW = ""
+        GREEN = ""
+        BLUE = ""
+        CYAN = ""
+        MAGENTA = ""
+        RESET = ""
+    class Style:
+        RESET_ALL = ""
+
 # Default log level
 DEFAULT_LOG_LEVEL = logging.INFO
 
@@ -54,9 +73,34 @@ def _create_log_directory() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter that adds colors to log levels."""
+    
+    # Color mapping for different log levels
+    COLORS = {
+        logging.DEBUG: Fore.CYAN if COLORAMA_AVAILABLE else "",
+        logging.INFO: Fore.GREEN if COLORAMA_AVAILABLE else "",
+        logging.WARNING: Fore.YELLOW if COLORAMA_AVAILABLE else "",
+        logging.ERROR: Fore.RED if COLORAMA_AVAILABLE else "",
+        logging.CRITICAL: Fore.RED + Style.BRIGHT if COLORAMA_AVAILABLE else "",
+    }
+    
+    RESET = Style.RESET_ALL if COLORAMA_AVAILABLE else ""
+    
+    def format(self, record):
+        # Add color to levelname
+        if COLORAMA_AVAILABLE:
+            levelname = record.levelname
+            color = self.COLORS.get(record.levelno, "")
+            record.levelname = f"{color}{levelname}{self.RESET}"
+        
+        # Format the message
+        return super().format(record)
+
+
 def _setup_console_handler(logger: logging.Logger, log_level: int) -> None:
     """
-    Set up console handler for development output.
+    Set up console handler for development output with colored output.
     
     Args:
         logger: Logger instance to add handler to
@@ -65,8 +109,8 @@ def _setup_console_handler(logger: logging.Logger, log_level: int) -> None:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     
-    # Use simpler format for console (more readable)
-    console_format = logging.Formatter(
+    # Use colored formatter for console (more readable)
+    console_format = ColoredFormatter(
         "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
