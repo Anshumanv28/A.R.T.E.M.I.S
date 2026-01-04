@@ -22,7 +22,7 @@ sys.path.insert(0, str(project_root))
 
 # Try to import required modules
 try:
-    from artemis.rag import Ingester, Retriever, RetrievalMode, csv_to_documents, DocumentSchema
+    from artemis.rag import Indexer, Retriever, RetrievalMode, csv_to_documents, DocumentSchema
     from sentence_transformers import SentenceTransformer
     COMPONENTS_AVAILABLE = True
 except ImportError as e:
@@ -104,7 +104,7 @@ def test_embedding_dimensions():
         model = SentenceTransformer("all-MiniLM-L6-v2")
         expected_dim = model.get_sentence_embedding_dimension()
         
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_dimensions",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
@@ -112,7 +112,7 @@ def test_embedding_dimensions():
         
         # Check collection dimension
         from qdrant_client import QdrantClient
-        client = ingester.qdrant_client
+        client = indexer.qdrant_client
         collection_info = client.get_collection("test_dimensions")
         collection_dim = collection_info.config.params.vectors.size
         
@@ -130,41 +130,41 @@ def test_embedding_dimensions():
         traceback.print_exc()
 
 
-def test_ingester_storage():
-    """Test Ingester stores documents correctly to Qdrant."""
+def test_indexer_storage():
+    """Test Indexer stores documents correctly to Qdrant."""
     if not COMPONENTS_AVAILABLE:
-        print("Skipping ingester storage test (components not available)")
+        print("Skipping indexer storage test (components not available)")
         return
     
     qdrant_url = os.getenv("QDRANT_URL")
     if not qdrant_url:
-        print("⚠️  QDRANT_URL not set - skipping ingester storage test")
+        print("⚠️  QDRANT_URL not set - skipping indexer storage test")
         return
     
     print("=" * 60)
-    print("Unit Test 3: Ingester Storage")
+    print("Unit Test 3: Indexer Storage")
     print("=" * 60)
     
     try:
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_storage",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
         )
         
-        print(f"✅ Ingester initialized")
+        print(f"✅ Indexer initialized")
         print(f"   Collection: test_storage")
         print()
         
         # Store documents
-        print(f"Ingesting {len(SAMPLE_DOCUMENTS)} documents...")
-        ingester.add_documents(SAMPLE_DOCUMENTS, SAMPLE_METADATA)
+        print(f"Indexing {len(SAMPLE_DOCUMENTS)} documents...")
+        indexer.add_documents(SAMPLE_DOCUMENTS, SAMPLE_METADATA)
         
         print("✅ Documents stored successfully!")
         
         # Verify documents are in Qdrant
         from qdrant_client.models import Filter, FieldCondition, MatchValue
-        client = ingester.qdrant_client
+        client = indexer.qdrant_client
         scroll_result = client.scroll(
             collection_name="test_storage",
             limit=10
@@ -177,7 +177,7 @@ def test_ingester_storage():
             f"Expected {len(SAMPLE_DOCUMENTS)} documents, found {stored_count}"
         
     except Exception as e:
-        print(f"❌ Ingester storage test failed: {e}")
+        print(f"❌ Indexer storage test failed: {e}")
         import traceback
         traceback.print_exc()
 
@@ -199,7 +199,7 @@ def test_retriever_semantic_search():
     
     try:
         # Use existing collection from previous test
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_storage",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
@@ -207,7 +207,7 @@ def test_retriever_semantic_search():
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester
+            indexer=indexer
         )
         
         print(f"✅ Retriever initialized")
@@ -255,7 +255,7 @@ def test_retrieval_strategy_registry():
     print("=" * 60)
     
     try:
-        from artemis.rag.core.retrieval import RETRIEVAL_STRATEGIES, register_strategy
+        from artemis.rag.core.retriever import RETRIEVAL_STRATEGIES, register_strategy
         
         # Check that semantic strategy is registered
         assert RetrievalMode.SEMANTIC in RETRIEVAL_STRATEGIES, \
@@ -303,7 +303,7 @@ def test_retrieval_mode_switching():
     print("=" * 60)
     
     try:
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_storage",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
@@ -312,7 +312,7 @@ def test_retrieval_mode_switching():
         # Test semantic mode
         retriever_semantic = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester
+            indexer=indexer
         )
         results = retriever_semantic.retrieve("Italian food", k=2)
         print(f"✅ SEMANTIC mode: Retrieved {len(results)} results")
@@ -320,7 +320,7 @@ def test_retrieval_mode_switching():
         # Test keyword mode (should raise NotImplementedError)
         retriever_keyword = Retriever(
             mode=RetrievalMode.KEYWORD,
-            ingester=ingester
+            indexer=indexer
         )
         try:
             retriever_keyword.retrieve("Italian food", k=2)
@@ -331,7 +331,7 @@ def test_retrieval_mode_switching():
         # Test hybrid mode (should raise NotImplementedError)
         retriever_hybrid = Retriever(
             mode=RetrievalMode.HYBRID,
-            ingester=ingester
+            indexer=indexer
         )
         try:
             retriever_hybrid.retrieve("Italian food", k=2)
@@ -361,22 +361,22 @@ def test_end_to_end_pipeline():
     print("=" * 60)
     
     try:
-        # Step 1: Create ingester
-        ingester = Ingester(
+        # Step 1: Create indexer
+        indexer = Indexer(
             collection_name="test_e2e",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
         )
-        print("✅ Step 1: Ingester created")
+        print("✅ Step 1: Indexer created")
         
-        # Step 2: Ingest documents
-        ingester.add_documents(SAMPLE_DOCUMENTS, SAMPLE_METADATA)
-        print("✅ Step 2: Documents ingested")
+        # Step 2: Index documents
+        indexer.add_documents(SAMPLE_DOCUMENTS, SAMPLE_METADATA)
+        print("✅ Step 2: Documents indexed")
         
         # Step 3: Create retriever
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester
+            indexer=indexer
         )
         print("✅ Step 3: Retriever created")
         
@@ -413,7 +413,7 @@ def test_retrieval_relevance():
     print("=" * 60)
     
     try:
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_storage",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
@@ -421,7 +421,7 @@ def test_retrieval_relevance():
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester
+            indexer=indexer
         )
         
         # Test multiple queries
@@ -459,7 +459,7 @@ def test_retrieval_relevance():
 
 
 def test_metadata_preservation():
-    """Ensure metadata is preserved through ingestion and retrieval."""
+    """Ensure metadata is preserved through indexing and retrieval."""
     if not COMPONENTS_AVAILABLE:
         print("Skipping metadata preservation test (components not available)")
         return
@@ -474,20 +474,20 @@ def test_metadata_preservation():
     print("=" * 60)
     
     try:
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_metadata",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
         )
         
-        # Ingest with metadata
-        ingester.add_documents(SAMPLE_DOCUMENTS, SAMPLE_METADATA)
-        print("✅ Documents ingested with metadata")
+        # Index with metadata
+        indexer.add_documents(SAMPLE_DOCUMENTS, SAMPLE_METADATA)
+        print("✅ Documents indexed with metadata")
         
         # Retrieve and check metadata
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester
+            indexer=indexer
         )
         
         results = retriever.retrieve("restaurant", k=5)
@@ -528,7 +528,7 @@ def test_multiple_queries():
     print("=" * 60)
     
     try:
-        ingester = Ingester(
+        indexer = Indexer(
             collection_name="test_storage",
             qdrant_url=qdrant_url,
             qdrant_api_key=os.getenv("QDRANT_API_KEY")
@@ -536,7 +536,7 @@ def test_multiple_queries():
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester
+            indexer=indexer
         )
         
         query_types = [
@@ -581,7 +581,7 @@ if __name__ == "__main__":
     print()
     test_embedding_dimensions()
     print()
-    test_ingester_storage()
+    test_indexer_storage()
     print()
     test_retriever_semantic_search()
     print()

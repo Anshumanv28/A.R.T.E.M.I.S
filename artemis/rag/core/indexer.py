@@ -1,5 +1,5 @@
 """
-Document ingestion module for A.R.T.E.M.I.S.
+Document indexing module for A.R.T.E.M.I.S.
 
 Handles document storage, embedding generation, and Qdrant operations.
 Separated from retrieval to enable independent testing and extensibility.
@@ -13,20 +13,20 @@ from uuid import uuid4
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-from sentence_transformers import SentenceTransformer
 
 from artemis.utils import get_logger
+from artemis.rag.core.embedder import Embedder
 
 logger = get_logger(__name__)
 
 
-class Ingester:
+class Indexer:
     """
-    Handles document ingestion into the vector store.
+    Handles document indexing into the vector store.
     
     Responsibilities:
     - Document file reading (if file paths provided)
-    - Embedding generation using SentenceTransformer
+    - Embedding generation using Embedder
     - Qdrant collection management
     - Document storage with metadata
     - File cleanup after successful ingestion
@@ -37,20 +37,31 @@ class Ingester:
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
         collection_name: str = "artemis_documents",
-        embedding_model: str = "all-MiniLM-L6-v2",
+        embedder: Optional[Embedder] = None,
     ):
         """
-        Initialize the ingester.
+        Initialize the indexer.
         
         Args:
             qdrant_url: Qdrant server URL (defaults to env var QDRANT_URL)
             qdrant_api_key: Qdrant API key (defaults to env var QDRANT_API_KEY)
             collection_name: Name of the Qdrant collection
-            embedding_model: Sentence transformer model name for embeddings
+            embedder: Optional Embedder instance. If None, creates a default Embedder.
+                     Pass an Embedder instance to use a custom model or share embedders.
         """
         self.collection_name = collection_name
         
-        logger.info(f"Initializing Ingester with collection={collection_name}, model={embedding_model}")
+        # Initialize embedder
+        if embedder is not None:
+            self.embedder = embedder
+            logger.info(f"Initializing Indexer with collection={collection_name}, using provided Embedder")
+        else:
+            logger.info(f"Initializing Indexer with collection={collection_name}, creating default Embedder")
+            try:
+                self.embedder = Embedder()  # Uses default model "all-MiniLM-L6-v2"
+            except Exception as e:
+                logger.exception("Failed to create default Embedder", exc_info=True)
+                raise
         
         # Initialize Qdrant client
         qdrant_url = qdrant_url or os.getenv("QDRANT_URL")
@@ -74,17 +85,14 @@ class Ingester:
             logger.exception("Failed to connect to Qdrant", exc_info=True)
             raise
         
-        # Initialize embedding model
+        # Ensure collection exists (needs embedder dimension)
         try:
-            logger.info(f"Loading embedding model: {embedding_model}")
-            self.embedding_model = SentenceTransformer(embedding_model)
-            logger.info(f"Successfully loaded embedding model: {embedding_model}")
             self._ensure_collection_exists()
         except Exception as e:
-            logger.exception(f"Failed to load embedding model: {embedding_model}", exc_info=True)
+            logger.exception("Failed to ensure collection exists", exc_info=True)
             raise
         
-        logger.debug("Ingester initialization complete")
+        logger.debug("Indexer initialization complete")
     
     def _ensure_collection_exists(self) -> None:
         """Ensure the Qdrant collection exists with correct configuration."""
@@ -93,8 +101,8 @@ class Ingester:
             collection_names = [col.name for col in collections]
             
             if self.collection_name not in collection_names:
-                # Get embedding dimension from model
-                embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
+                # Get embedding dimension from embedder
+                embedding_dim = self.embedder.get_dimension()
                 logger.info(
                     f"Creating Qdrant collection '{self.collection_name}' "
                     f"with embedding dimension {embedding_dim}"
@@ -226,13 +234,12 @@ class Ingester:
             List of embedding vectors
         """
         logger.debug(f"Generating embeddings for {len(documents)} documents")
-        embeddings = self.embedding_model.encode(
+        embeddings = self.embedder.encode(
             documents,
-            show_progress_bar=True,
-            convert_to_numpy=True,
+            show_progress=True,
         )
         logger.debug(f"Generated {len(embeddings)} embeddings")
-        return embeddings.tolist()
+        return embeddings
     
     def _prepare_points(
         self,

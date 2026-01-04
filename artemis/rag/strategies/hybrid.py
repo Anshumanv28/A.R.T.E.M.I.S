@@ -7,7 +7,7 @@ This will be implemented in Phase 2.
 
 from typing import List, Dict, Any
 
-from artemis.rag.core.retrieval import register_strategy, RetrievalMode, Retriever
+from artemis.rag.core.retriever import register_strategy, RetrievalMode, Retriever
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)

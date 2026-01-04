@@ -408,40 +408,44 @@ document = format_doc(doc_parts)
 
 ## 🔍 Retrieval System
 
-A.R.T.E.M.I.S. uses a **modular retrieval architecture** with separated ingestion and retrieval components, enabling extensible search strategies via a registry pattern.
+A.R.T.E.M.I.S. uses a **modular retrieval architecture** with separated indexing and retrieval components, enabling extensible search strategies via a registry pattern.
 
 ### Architecture Overview
 
 The retrieval system is split into two main components:
 
-1. **`Ingester`** - Handles document storage, embedding generation, and Qdrant operations
+1. **`Indexer`** - Handles document storage, embedding generation, and Qdrant operations
 2. **`Retriever`** - Handles document retrieval using registered search strategies
 
 This separation enables:
 
-- Independent testing of ingestion and retrieval
+- Independent testing of indexing and retrieval
 - Shared resources between components
 - Extensible search strategies via decorator registration
 
 ### Basic Usage
 
 ```python
-from artemis.rag import Ingester, Retriever, RetrievalMode
+from artemis.rag import Indexer, Retriever, RetrievalMode
 
-# Option 1: Separate ingestion and retrieval (recommended)
-ingester = Ingester(collection_name="restaurants")
-ingester.add_documents(docs, metadata)
+# Option 1: Separate indexing and retrieval (recommended)
+indexer = Indexer(collection_name="restaurants")
+indexer.add_documents(docs, metadata)
 
 retriever = Retriever(
     mode=RetrievalMode.SEMANTIC,
-    ingester=ingester  # Share resources
+    indexer=indexer  # Share resources
 )
 results = retriever.retrieve("Italian restaurants", k=5)
 
-# Option 2: Backward compatible (Retriever creates ingester internally)
-retriever = Retriever(mode=RetrievalMode.SEMANTIC)
-retriever.add_documents(docs, metadata)  # Delegates to internal ingester
+# Option 2: Retriever with explicit embedder (for retrieval-only use)
+from artemis.rag import Embedder
+embedder = Embedder()  # Uses default model, or Embedder(model_name="...")
+retriever = Retriever(mode=RetrievalMode.SEMANTIC, embedder=embedder)
 results = retriever.retrieve("Italian restaurants", k=5)
+
+# Note: For adding documents, use Indexer. Retriever.add_documents() is for
+# backward compatibility only - it creates an Indexer internally.
 ```
 
 ### Retrieval Modes
@@ -469,7 +473,7 @@ You can register custom retrieval strategies using the `@register_strategy` deco
 ```python
 # artemis/rag/strategies/my_custom_strategy.py
 from typing import List, Dict, Any
-from artemis.rag.core.retrieval import register_strategy, RetrievalMode, Retriever
+from artemis.rag.core.retriever import register_strategy, RetrievalMode, Retriever
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)

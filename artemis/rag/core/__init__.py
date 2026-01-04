@@ -13,17 +13,26 @@ from artemis.rag.core.document_converter import (
     format_doc,
 )
 
-# Import retriever and ingestion (requires qdrant_client - optional)
+# Import embedder (requires sentence_transformers - optional)
 try:
-    from artemis.rag.core.retrieval import Retriever, RetrievalMode, register_strategy
-    from artemis.rag.core.ingestion import Ingester
+    from artemis.rag.core.embedder import Embedder
+    _EMBEDDER_AVAILABLE = True
+except ImportError:
+    # Embedder not available if sentence_transformers is not installed
+    Embedder = None
+    _EMBEDDER_AVAILABLE = False
+
+# Import retriever and indexer (requires qdrant_client - optional)
+try:
+    from artemis.rag.core.retriever import Retriever, RetrievalMode, register_strategy
+    from artemis.rag.core.indexer import Indexer
     _RETRIEVER_AVAILABLE = True
 except ImportError:
-    # Retriever/Ingester not available if qdrant_client is not installed
+    # Retriever/Indexer not available if qdrant_client is not installed
     Retriever = None
     RetrievalMode = None
     register_strategy = None
-    Ingester = None
+    Indexer = None
     _RETRIEVER_AVAILABLE = False
 
 __all__ = [
@@ -33,7 +42,11 @@ __all__ = [
     "format_doc",
 ]
 
-# Add retriever and ingestion to exports if available
+# Add embedder to exports if available
+if _EMBEDDER_AVAILABLE:
+    __all__.append("Embedder")
+
+# Add retriever and indexer to exports if available
 if _RETRIEVER_AVAILABLE:
-    __all__.extend(["Retriever", "RetrievalMode", "Ingester", "register_strategy"])
+    __all__.extend(["Retriever", "RetrievalMode", "Indexer", "register_strategy"])
 

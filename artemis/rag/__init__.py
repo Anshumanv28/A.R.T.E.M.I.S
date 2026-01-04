@@ -3,8 +3,8 @@ RAG (Retrieval Augmented Generation) module for A.R.T.E.M.I.S.
 
 This module provides a clean interface to all RAG functionality:
 - Document conversion (core/document_converter.py)
-- Document ingestion (core/ingestion.py)
-- Document retrieval (core/retrieval.py)
+- Document indexing (core/indexer.py)
+- Document retrieval (core/retriever.py)
 - Schema converters (converters/)
 - Retrieval strategies (strategies/)
 """
@@ -19,14 +19,14 @@ from artemis.rag.core import (
 
 # Re-export core components for backward compatibility
 try:
-    from artemis.rag.core import Retriever, RetrievalMode, register_strategy, Ingester
+    from artemis.rag.core import Retriever, RetrievalMode, register_strategy, Indexer
     _RETRIEVER_AVAILABLE = True
 except ImportError:
-    # Retriever/Ingester not available if qdrant_client is not installed
+    # Retriever/Indexer not available if qdrant_client is not installed
     Retriever = None
     RetrievalMode = None
     register_strategy = None
-    Ingester = None
+    Indexer = None
     _RETRIEVER_AVAILABLE = False
 
 # Auto-register additional converters (travel, support, etc.)
@@ -54,5 +54,5 @@ __all__ = [
 
 # Add retriever and ingestion to exports if available
 if _RETRIEVER_AVAILABLE:
-    __all__.extend(["Retriever", "RetrievalMode", "Ingester", "register_strategy"])
+    __all__.extend(["Retriever", "RetrievalMode", "Indexer", "register_strategy"])
 

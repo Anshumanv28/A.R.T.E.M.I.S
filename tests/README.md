@@ -39,7 +39,7 @@ python test_embeddings_retrieval.py
 
 ### Test 2: Ingestion and Retrieval (Optional)
 
-- Uses `Ingester` to read documents from files
+- Uses `Indexer` to read documents from files
 - Ingests into Qdrant vector database
 - Deletes files after successful ingestion
 - Tests retrieval functionality using `Retriever`

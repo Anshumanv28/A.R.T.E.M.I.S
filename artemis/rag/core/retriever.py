@@ -10,10 +10,10 @@ from enum import Enum
 from typing import List, Dict, Optional, Any, Callable
 
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
 from artemis.utils import get_logger
-from artemis.rag.core.ingestion import Ingester
+from artemis.rag.core.indexer import Indexer
+from artemis.rag.core.embedder import Embedder
 
 logger = get_logger(__name__)
 
@@ -64,35 +64,51 @@ class Retriever:
     def __init__(
         self,
         mode: RetrievalMode = RetrievalMode.SEMANTIC,
-        ingester: Optional[Ingester] = None,
+        indexer: Optional[Indexer] = None,
+        embedder: Optional[Embedder] = None,
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
         collection_name: str = "artemis_documents",
-        embedding_model: str = "all-MiniLM-L6-v2",
     ):
         """
         Initialize the retriever.
         
         Args:
             mode: Retrieval mode (SEMANTIC, KEYWORD, or HYBRID)
-            ingester: Optional Ingester instance. If provided, uses it for shared resources.
-                     If None, creates internal resources for retrieval only.
-            qdrant_url: Qdrant server URL (defaults to env var QDRANT_URL)
-            qdrant_api_key: Qdrant API key (defaults to env var QDRANT_API_KEY)
-            collection_name: Name of the Qdrant collection
-            embedding_model: Sentence transformer model name for embeddings (used if ingester not provided)
+            indexer: Optional Indexer instance. If provided, uses it for shared resources
+                     (Qdrant client, embedder, collection). This ensures the same embedder
+                     is used for both indexing and retrieval, which is required for
+                     consistent semantic search. If None, creates internal resources.
+            embedder: Optional Embedder instance. Only used if indexer is None.
+                     - If indexer is provided: Always uses indexer's embedder (ignores this parameter)
+                     - If indexer is None and mode is SEMANTIC/HYBRID: Required, raises ValueError if not provided
+                     - If indexer is None and mode is KEYWORD: Not needed, can be None
+            qdrant_url: Qdrant server URL (defaults to env var QDRANT_URL, only used if indexer is None)
+            qdrant_api_key: Qdrant API key (defaults to env var QDRANT_API_KEY, only used if indexer is None)
+            collection_name: Name of the Qdrant collection (only used if indexer is None)
+        
+        Examples:
+            >>> # Recommended: Use indexer (shares embedder for consistency)
+            >>> indexer = Indexer(collection_name="docs")
+            >>> indexer.add_documents(docs, metadata)
+            >>> retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+            >>> # Uses indexer's embedder automatically
+            >>> 
+            >>> # Alternative: Pass embedder explicitly (for retrieval-only use)
+            >>> embedder = Embedder(model_name="all-MiniLM-L6-v2")
+            >>> retriever = Retriever(mode=RetrievalMode.SEMANTIC, embedder=embedder)
         """
         self.mode = mode
         self.collection_name = collection_name
         
         logger.info(f"Initializing Retriever with mode={mode.value}, collection={collection_name}")
         
-        # Use provided ingester or create internal resources
-        if ingester is not None:
-            self.ingester = ingester
-            self.qdrant_client = ingester.qdrant_client
-            self.embedding_model = ingester.embedding_model
-            logger.debug("Using provided Ingester instance")
+        # Use provided indexer or create internal resources
+        if indexer is not None:
+            self.indexer = indexer
+            self.qdrant_client = indexer.qdrant_client
+            self.embedder = indexer.embedder
+            logger.debug("Using provided Indexer instance")
         else:
             # Create internal resources for retrieval only
             qdrant_url = qdrant_url or os.getenv("QDRANT_URL")
@@ -116,19 +132,22 @@ class Retriever:
                 logger.exception("Failed to connect to Qdrant", exc_info=True)
                 raise
             
-            # Initialize embedding model for semantic/hybrid search
+            # Initialize embedder for semantic/hybrid search
             if mode == RetrievalMode.SEMANTIC or mode == RetrievalMode.HYBRID:
-                try:
-                    logger.info(f"Loading embedding model: {embedding_model}")
-                    self.embedding_model = SentenceTransformer(embedding_model)
-                    logger.info(f"Successfully loaded embedding model: {embedding_model}")
-                except Exception as e:
-                    logger.exception(f"Failed to load embedding model: {embedding_model}", exc_info=True)
-                    raise
+                if embedder is not None:
+                    self.embedder = embedder
+                    logger.debug("Using provided Embedder instance")
+                else:
+                    raise ValueError(
+                        f"Embedder is required for {mode.value} retrieval mode. "
+                        "Either pass an embedder parameter, use an Indexer instance, "
+                        "or create an Embedder explicitly: "
+                        "Retriever(embedder=Embedder(model_name='...'))"
+                    )
             else:
-                self.embedding_model = None
+                self.embedder = None
             
-            self.ingester = None
+            self.indexer = None
         
         # Keyword search index (for future implementation)
         self.keyword_index = None
@@ -142,36 +161,25 @@ class Retriever:
         """
         Add documents to the vector store.
         
-        For backward compatibility, delegates to Ingester.
-        If no ingester was provided, creates one internally.
+        For backward compatibility, delegates to Indexer.
+        If no indexer was provided, creates one internally using the existing embedder.
         
         Args:
             documents: List of text documents or file paths
             metadata: Optional metadata list or file path
         """
-        if self.ingester is None:
-            # Create internal ingester for backward compatibility
-            logger.debug("Creating internal Ingester for backward compatibility")
-            # Get embedding model name if available
-            embedding_model_name = "all-MiniLM-L6-v2"
-            if self.embedding_model is not None:
-                # Try to get model name from the SentenceTransformer
-                try:
-                    embedding_model_name = getattr(self.embedding_model, '_model_name', None) or \
-                                          getattr(self.embedding_model, 'model_name', None) or \
-                                          "all-MiniLM-L6-v2"
-                except:
-                    embedding_model_name = "all-MiniLM-L6-v2"
-            
-            self.ingester = Ingester(
+        if self.indexer is None:
+            # Create internal indexer for backward compatibility
+            logger.debug("Creating internal Indexer for backward compatibility")
+            self.indexer = Indexer(
                 collection_name=self.collection_name,
-                embedding_model=embedding_model_name
+                embedder=self.embedder  # Use existing embedder or None (will create default)
             )
-            # Update references to use ingester's resources
-            self.qdrant_client = self.ingester.qdrant_client
-            self.embedding_model = self.ingester.embedding_model
+            # Update references to use indexer's resources
+            self.qdrant_client = self.indexer.qdrant_client
+            self.embedder = self.indexer.embedder
         
-        self.ingester.add_documents(documents, metadata)
+        self.indexer.add_documents(documents, metadata)
     
     def retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """
@@ -197,7 +205,7 @@ class Retriever:
                 f"Strategy for {self.mode.value} is not registered. "
                 f"Available strategies: {available_modes}. "
                 "You can register a custom strategy:\n"
-                "  from artemis.rag.core.retrieval import register_strategy, RetrievalMode\n"
+                "  from artemis.rag.core.retriever import register_strategy, RetrievalMode\n"
                 f"  @register_strategy(RetrievalMode.{self.mode.name})\n"
                 "  def my_strategy(retriever, query: str, k: int): ..."
             )

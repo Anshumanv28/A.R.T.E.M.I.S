@@ -7,7 +7,7 @@ This is the primary retrieval strategy for MVP.
 
 from typing import List, Dict, Any
 
-from artemis.rag.core.retrieval import register_strategy, RetrievalMode, Retriever
+from artemis.rag.core.retriever import register_strategy, RetrievalMode, Retriever
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
@@ -23,7 +23,7 @@ def semantic_search_strategy(retriever: Retriever, query: str, k: int) -> List[D
     documents in the Qdrant vector database.
     
     Args:
-        retriever: Retriever instance (provides access to qdrant_client, embedding_model, etc.)
+        retriever: Retriever instance (provides access to qdrant_client, embedder, etc.)
         query: Search query string
         k: Number of results to return
         
@@ -45,15 +45,12 @@ def semantic_search_strategy(retriever: Retriever, query: str, k: int) -> List[D
     """
     logger.debug(f"Performing semantic search: query='{query[:50]}...', k={k}")
     
-    if retriever.embedding_model is None:
-        raise ValueError("Embedding model is required for semantic search")
+    if retriever.embedder is None:
+        raise ValueError("Embedder is required for semantic search")
     
     try:
         # Generate query embedding
-        query_embedding = retriever.embedding_model.encode(
-            query,
-            convert_to_numpy=True,
-        ).tolist()
+        query_embedding = retriever.embedder.encode_single(query)
         logger.debug("Generated query embedding")
         
         # Search in Qdrant

@@ -26,13 +26,13 @@ sys.path.insert(0, str(project_root))
 # Import from artemis.rag (re-exports from core)
 from artemis.rag import csv_to_documents, DocumentSchema
 
-# Try to import retriever and ingester (optional for testing)
+# Try to import retriever and indexer (optional for testing)
 try:
-    from artemis.rag import Retriever, RetrievalMode, Ingester
+    from artemis.rag import Retriever, RetrievalMode, Indexer
     RETRIEVER_AVAILABLE = True
 except ImportError:
     RETRIEVER_AVAILABLE = False
-    print("⚠️  Retriever/Ingester not available (qdrant_client not installed)")
+    print("⚠️  Retriever/Indexer not available (qdrant_client not installed)")
     print("   Will test document conversion only")
     print()
 
@@ -144,18 +144,18 @@ def test_conversion():
         return None, None
 
 
-def test_retriever_ingestion(doc_paths, metadata_path):
-    """Test ingestion and retrieval (reads files and deletes them)."""
+def test_retriever_indexing(doc_paths, metadata_path):
+    """Test indexing and retrieval (reads files and deletes them)."""
     if not doc_paths or not metadata_path:
-        print("Skipping ingestion/retrieval test (conversion failed)")
+        print("Skipping indexing/retrieval test (conversion failed)")
         return
     
     if not RETRIEVER_AVAILABLE:
-        print("Skipping ingestion/retrieval test (retriever not available)")
+        print("Skipping indexing/retrieval test (retriever not available)")
         return
     
     print("=" * 60)
-    print("Test 2: Ingestion and Retrieval (reads files, deletes after)")
+    print("Test 2: Indexing and Retrieval (reads files, deletes after)")
     print("=" * 60)
     
     # Check if Qdrant is configured
@@ -163,7 +163,7 @@ def test_retriever_ingestion(doc_paths, metadata_path):
     qdrant_key = os.getenv("QDRANT_API_KEY")
     
     if not qdrant_url:
-        print("⚠️  QDRANT_URL not set - skipping ingestion/retrieval test")
+        print("⚠️  QDRANT_URL not set - skipping indexing/retrieval test")
         print("   Set QDRANT_URL and QDRANT_API_KEY environment variables to test")
         print()
         from artemis.utils.paths import get_docs_dir
@@ -173,42 +173,42 @@ def test_retriever_ingestion(doc_paths, metadata_path):
     try:
         print(f"Connecting to Qdrant: {qdrant_url}")
         
-        # Use Ingester for document ingestion
-        ingester = Ingester(
+        # Use Indexer for document indexing
+        indexer = Indexer(
             collection_name="test_restaurants",
             qdrant_url=qdrant_url,
             qdrant_api_key=qdrant_key
         )
         
-        print(f"✅ Ingester initialized")
+        print(f"✅ Indexer initialized")
         print(f"   Collection: test_restaurants")
         print()
         
-        # Count files before ingestion
+        # Count files before indexing
         from artemis.utils.paths import get_docs_dir
         docs_dir = get_docs_dir()
         files_before = len([p for p in docs_dir.glob("*.txt") if p.exists()])
-        print(f"Files in {docs_dir} before ingestion: {files_before}")
+        print(f"Files in {docs_dir} before indexing: {files_before}")
         
-        # Ingest documents (will delete files after)
-        print("Ingesting documents...")
-        ingester.add_documents(doc_paths, metadata_path)
+        # Index documents (will delete files after)
+        print("Indexing documents...")
+        indexer.add_documents(doc_paths, metadata_path)
         
-        print("✅ Documents ingested successfully!")
+        print("✅ Documents indexed successfully!")
         print()
         
-        # Check files after ingestion
+        # Check files after indexing
         files_after = len([p for p in docs_dir.glob("*.txt") if p.exists()])
         metadata_after = len([p for p in docs_dir.glob("*_metadata.json") if p.exists()])
         
-        print(f"Files in {docs_dir} after ingestion:")
+        print(f"Files in {docs_dir} after indexing:")
         print(f"   Document files: {files_after} (should be 0)")
         print(f"   Metadata files: {metadata_after} (should be 0)")
         
         if files_after == 0 and metadata_after == 0:
-            print("✅ All files deleted after successful ingestion!")
+            print("✅ All files deleted after successful indexing!")
         else:
-            print("⚠️  Some files remain (ingestion may have failed)")
+            print("⚠️  Some files remain (indexing may have failed)")
         
         print()
         
@@ -217,7 +217,7 @@ def test_retriever_ingestion(doc_paths, metadata_path):
         print("-" * 60)
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
-            ingester=ingester  # Use the same ingester instance
+            indexer=indexer  # Use the same indexer instance
         )
         results = retriever.retrieve("Italian restaurants in Mumbai with rating above 4", k=3)
         print(f"✅ Retrieved {len(results)} results")
@@ -228,7 +228,7 @@ def test_retriever_ingestion(doc_paths, metadata_path):
             print(f"   Text: {results[0].get('text', '')[:150]}...")
         
     except Exception as e:
-        print(f"❌ Ingestion/retrieval test failed: {e}")
+        print(f"❌ Indexing/retrieval test failed: {e}")
         import traceback
         traceback.print_exc()
         print()
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     
     # Only run file-based tests if we're in file mode
     if doc_paths:
-        test_retriever_ingestion(doc_paths, metadata_path)
+        test_retriever_indexing(doc_paths, metadata_path)
     
     # Always test in-memory mode explicitly
     test_in_memory_mode()
