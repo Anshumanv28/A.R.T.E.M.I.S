@@ -25,6 +25,14 @@ from artemis.utils import get_logger, get_docs_dir
 
 logger = get_logger(__name__)
 
+# Import chunker (will be available after chunkers module is imported)
+try:
+    from artemis.rag.core.chunkers.csv_chunker import csv_row_chunker
+    from artemis.rag.core.chunker import CHUNKERS, ChunkStrategy
+    _CHUNKERS_AVAILABLE = True
+except ImportError:
+    _CHUNKERS_AVAILABLE = False
+
 # Default directory for storing converted documents
 DOCS_DIR = get_docs_dir()
 
@@ -164,6 +172,12 @@ def _save_documents_to_files(
 
 def _auto_convert_csv(csv_path: str) -> Tuple[List[str], List[Dict]]:
     """
+    Legacy auto-convert function (deprecated, use chunker instead).
+    
+    This function is kept for backward compatibility but should not be used
+    directly. Use the CSV chunker via csv_to_documents() instead.
+    """
+    """
     Automatically convert CSV to documents using column headers.
     
     Uses CSV column names as labels and creates formatted documents
@@ -276,38 +290,53 @@ def csv_to_documents(
         if save_to_disk:
             logger.debug("save_to_disk enabled via ARTEMIS_SAVE_DOCS_TO_DISK environment variable")
     
-    # Convert CSV to documents (in memory first)
-    if schema is None:
-        logger.info(f"Converting CSV to documents (auto-detect): path={csv_path}")
-        documents, metadata = _auto_convert_csv(csv_path)
-    else:
-        logger.info(f"Converting CSV to documents: path={csv_path}, schema={schema.value}")
+    # Use chunker if available, otherwise fall back to old implementation
+    if _CHUNKERS_AVAILABLE:
+        # Load CSV as DataFrame
         try:
-            # Check if schema is registered
-            if schema not in SCHEMA_CONVERTERS:
-                logger.error(f"Schema '{schema.value}' is not registered")
-                available_schemas = [s.value for s in SCHEMA_CONVERTERS.keys()]
-                raise NotImplementedError(
-                    f"Schema '{schema.value}' is not implemented. "
-                    f"Available schemas: {available_schemas}. "
-                    "You can extend A.R.T.E.M.I.S by registering a converter:\n"
-                    "  from artemis.rag.core.document_converter import register_schema\n"
-                    f"  @register_schema(DocumentSchema.{schema.name})\n"
-                    "  def convert_your_schema(csv_path: str): ..."
-                )
-            
-            # Get and call the registered converter
-            converter = SCHEMA_CONVERTERS[schema]
-            documents, metadata = converter(csv_path)
-        except NotImplementedError:
-            # Re-raise NotImplementedError as-is
-            raise
+            df = pd.read_csv(csv_path)
+            logger.info(f"Loaded CSV with {len(df)} rows and {len(df.columns)} columns")
         except Exception as e:
-            logger.exception(
-                f"Error converting CSV to documents: path={csv_path}, schema={schema.value}",
-                exc_info=True
-            )
+            logger.exception(f"Failed to load CSV file: {csv_path}", exc_info=True)
             raise
+        
+        # Use CSV chunker
+        logger.info(f"Converting CSV to documents using chunker: path={csv_path}")
+        documents, metadata = csv_row_chunker(df, schema=schema, csv_path=csv_path)
+    else:
+        # Fallback to old implementation if chunkers not available
+        logger.warning("Chunkers not available, using legacy conversion")
+        if schema is None:
+            logger.info(f"Converting CSV to documents (auto-detect): path={csv_path}")
+            documents, metadata = _auto_convert_csv(csv_path)
+        else:
+            logger.info(f"Converting CSV to documents: path={csv_path}, schema={schema.value}")
+            try:
+                # Check if schema is registered
+                if schema not in SCHEMA_CONVERTERS:
+                    logger.error(f"Schema '{schema.value}' is not registered")
+                    available_schemas = [s.value for s in SCHEMA_CONVERTERS.keys()]
+                    raise NotImplementedError(
+                        f"Schema '{schema.value}' is not implemented. "
+                        f"Available schemas: {available_schemas}. "
+                        "You can extend A.R.T.E.M.I.S by registering a converter:\n"
+                        "  from artemis.rag.core.document_converter import register_schema\n"
+                        f"  @register_schema(DocumentSchema.{schema.name})\n"
+                        "  def convert_your_schema(csv_path: str): ..."
+                    )
+                
+                # Get and call the registered converter
+                converter = SCHEMA_CONVERTERS[schema]
+                documents, metadata = converter(csv_path)
+            except NotImplementedError:
+                # Re-raise NotImplementedError as-is
+                raise
+            except Exception as e:
+                logger.exception(
+                    f"Error converting CSV to documents: path={csv_path}, schema={schema.value}",
+                    exc_info=True
+                )
+                raise
     
     # Save to disk if requested
     if save_to_disk:

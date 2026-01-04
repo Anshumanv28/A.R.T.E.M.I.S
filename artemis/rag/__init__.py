@@ -5,8 +5,10 @@ This module provides a clean interface to all RAG functionality:
 - Document conversion (core/document_converter.py)
 - Document indexing (core/indexer.py)
 - Document retrieval (core/retriever.py)
+- File ingestion with chunking (core/ingestion.py)
 - Schema converters (converters/)
 - Retrieval strategies (strategies/)
+- Chunking strategies (core/chunkers/)
 """
 
 # Import from core module (re-exports for backward compatibility)
@@ -45,12 +47,52 @@ except ImportError:
     # Strategies module not available or not yet implemented
     pass
 
+# Re-export chunking components
+try:
+    from artemis.rag.core import (
+        FileType,
+        ChunkStrategy,
+        register_chunker,
+        ingest_file,
+        ingest_csv,
+        ingest_pdf,
+        ingest_docx,
+        ingest_md,
+        ingest_text,
+    )
+    _CHUNKING_AVAILABLE = True
+except ImportError:
+    FileType = None
+    ChunkStrategy = None
+    register_chunker = None
+    ingest_file = None
+    ingest_csv = None
+    ingest_pdf = None
+    ingest_docx = None
+    ingest_md = None
+    ingest_text = None
+    _CHUNKING_AVAILABLE = False
+
 __all__ = [
     "csv_to_documents",
     "DocumentSchema",
     "register_schema",
     "format_doc",
 ]
+
+# Add chunking components to exports if available
+if _CHUNKING_AVAILABLE:
+    __all__.extend([
+        "FileType",
+        "ChunkStrategy",
+        "register_chunker",
+        "ingest_file",
+        "ingest_csv",
+        "ingest_pdf",
+        "ingest_docx",
+        "ingest_md",
+        "ingest_text",
+    ])
 
 # Add retriever and ingestion to exports if available
 if _RETRIEVER_AVAILABLE:

@@ -423,6 +423,107 @@ This separation enables:
 - Shared resources between components
 - Extensible search strategies via decorator registration
 
+### File Ingestion and Chunking
+
+A.R.T.E.M.I.S. supports multiple file types and chunking strategies for flexible document processing:
+
+**Supported File Types:**
+
+- **CSV** - Structured data (row-based chunking)
+- **PDF** - PDF documents (fixed-size with overlap by default)
+- **DOCX** - Word documents (fixed-size with overlap by default)
+- **MD** - Markdown files (semantic chunking by default)
+- **TEXT** - Plain text files (fixed-size with overlap by default)
+
+**Chunking Strategies:**
+
+- **`CSV_ROW`** - Row-based chunking for CSV files (default for CSV)
+- **`FIXED`** - Fixed-size chunks without overlap
+- **`FIXED_OVERLAP`** - Fixed-size chunks with overlap (default for PDF/DOCX/TEXT)
+- **`SEMANTIC`** - Sentence/paragraph-aware chunking (default for Markdown)
+- **`AGENTIC`** - LLM-driven chunking (Phase 2, placeholder)
+
+**Default Strategy Mapping:**
+
+```python
+{
+    FileType.CSV: ChunkStrategy.CSV_ROW,
+    FileType.PDF: ChunkStrategy.FIXED_OVERLAP,
+    FileType.DOCX: ChunkStrategy.FIXED_OVERLAP,
+    FileType.MD: ChunkStrategy.SEMANTIC,
+    FileType.TEXT: ChunkStrategy.FIXED_OVERLAP,
+}
+```
+
+#### Basic File Ingestion
+
+```python
+from artemis.rag import Indexer, FileType, ingest_file
+
+# Create indexer
+indexer = Indexer(collection_name="documents")
+
+# Simple usage with defaults
+ingest_file("document.pdf", FileType.PDF, indexer)
+
+# Override chunking strategy
+from artemis.rag import ChunkStrategy
+ingest_file("document.pdf", FileType.PDF, indexer,
+            chunk_strategy=ChunkStrategy.SEMANTIC)
+
+# With chunker parameters
+ingest_file("document.txt", FileType.TEXT, indexer,
+            chunk_size=1500, overlap=300)
+
+# CSV with schema
+from artemis.rag import DocumentSchema
+ingest_file("restaurants.csv", FileType.CSV, indexer,
+            schema=DocumentSchema.RESTAURANT)
+```
+
+#### Convenience Functions
+
+```python
+from artemis.rag import ingest_csv, ingest_pdf, ingest_docx, ingest_md, ingest_text
+
+# Convenience functions for each file type
+ingest_csv("data.csv", indexer, schema=DocumentSchema.RESTAURANT)
+ingest_pdf("manual.pdf", indexer, chunk_size=1000, overlap=200)
+ingest_docx("report.docx", indexer)
+ingest_md("readme.md", indexer)
+ingest_text("notes.txt", indexer)
+```
+
+#### Extending with Custom Chunkers
+
+You can register custom chunking strategies using the `@register_chunker` decorator:
+
+```python
+from artemis.rag.core.chunker import register_chunker, ChunkStrategy
+
+@register_chunker(ChunkStrategy("custom_manual"))
+def my_custom_chunker(text: str, **kwargs) -> Tuple[List[str], List[Dict]]:
+    """
+    Custom chunking logic.
+
+    Args:
+        text: Input text to chunk
+        **kwargs: Additional parameters
+
+    Returns:
+        Tuple of (documents, metadata)
+    """
+    # Your custom chunking logic here
+    documents = []
+    metadata = []
+    # ... implementation ...
+    return documents, metadata
+
+# Use your custom chunker
+ingest_file("manual.pdf", FileType.PDF, indexer,
+            chunk_strategy=ChunkStrategy("custom_manual"))
+```
+
 ### Basic Usage
 
 ```python

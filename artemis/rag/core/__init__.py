@@ -22,6 +22,41 @@ except ImportError:
     Embedder = None
     _EMBEDDER_AVAILABLE = False
 
+# Import chunking components (no external dependencies)
+try:
+    from artemis.rag.core.chunker import (
+        FileType,
+        ChunkStrategy,
+        register_chunker,
+        DEFAULT_CHUNK_FOR_FILETYPE,
+    )
+    from artemis.rag.core.ingestion import (
+        ingest_file,
+        ingest_csv,
+        ingest_pdf,
+        ingest_docx,
+        ingest_md,
+        ingest_text,
+    )
+    # Auto-register chunkers
+    try:
+        from artemis.rag.core import chunkers  # noqa: F401
+    except ImportError:
+        pass
+    _CHUNKING_AVAILABLE = True
+except ImportError:
+    FileType = None
+    ChunkStrategy = None
+    register_chunker = None
+    DEFAULT_CHUNK_FOR_FILETYPE = None
+    ingest_file = None
+    ingest_csv = None
+    ingest_pdf = None
+    ingest_docx = None
+    ingest_md = None
+    ingest_text = None
+    _CHUNKING_AVAILABLE = False
+
 # Import retriever and indexer (requires qdrant_client - optional)
 try:
     from artemis.rag.core.retriever import Retriever, RetrievalMode, register_strategy
@@ -45,6 +80,21 @@ __all__ = [
 # Add embedder to exports if available
 if _EMBEDDER_AVAILABLE:
     __all__.append("Embedder")
+
+# Add chunking components to exports if available
+if _CHUNKING_AVAILABLE:
+    __all__.extend([
+        "FileType",
+        "ChunkStrategy",
+        "register_chunker",
+        "DEFAULT_CHUNK_FOR_FILETYPE",
+        "ingest_file",
+        "ingest_csv",
+        "ingest_pdf",
+        "ingest_docx",
+        "ingest_md",
+        "ingest_text",
+    ])
 
 # Add retriever and indexer to exports if available
 if _RETRIEVER_AVAILABLE:
