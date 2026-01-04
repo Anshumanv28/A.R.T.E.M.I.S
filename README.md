@@ -304,7 +304,7 @@ The RESTAURANT schema includes:
 Define your own schema converter to control exactly which columns are used, how they're labeled, and how documents are formatted:
 
 ```python
-from artemis.rag.document_converter import register_schema, DocumentSchema, csv_to_documents, format_doc
+from artemis.rag.core.document_converter import register_schema, DocumentSchema, csv_to_documents, format_doc
 import pandas as pd
 
 # Define your custom schema
@@ -406,6 +406,131 @@ document = format_doc(doc_parts)
 
 ---
 
+## 🔍 Retrieval System
+
+A.R.T.E.M.I.S. uses a **modular retrieval architecture** with separated ingestion and retrieval components, enabling extensible search strategies via a registry pattern.
+
+### Architecture Overview
+
+The retrieval system is split into two main components:
+
+1. **`Ingester`** - Handles document storage, embedding generation, and Qdrant operations
+2. **`Retriever`** - Handles document retrieval using registered search strategies
+
+This separation enables:
+
+- Independent testing of ingestion and retrieval
+- Shared resources between components
+- Extensible search strategies via decorator registration
+
+### Basic Usage
+
+```python
+from artemis.rag import Ingester, Retriever, RetrievalMode
+
+# Option 1: Separate ingestion and retrieval (recommended)
+ingester = Ingester(collection_name="restaurants")
+ingester.add_documents(docs, metadata)
+
+retriever = Retriever(
+    mode=RetrievalMode.SEMANTIC,
+    ingester=ingester  # Share resources
+)
+results = retriever.retrieve("Italian restaurants", k=5)
+
+# Option 2: Backward compatible (Retriever creates ingester internally)
+retriever = Retriever(mode=RetrievalMode.SEMANTIC)
+retriever.add_documents(docs, metadata)  # Delegates to internal ingester
+results = retriever.retrieve("Italian restaurants", k=5)
+```
+
+### Retrieval Modes
+
+A.R.T.E.M.I.S. supports multiple retrieval modes:
+
+- **`SEMANTIC`** (MVP) - Semantic vector search using embeddings
+- **`KEYWORD`** (Coming Soon) - BM25/TF-IDF keyword-based search
+- **`HYBRID`** (Coming Soon) - Combined semantic + keyword search
+
+### Extending with Custom Retrieval Strategies
+
+You can register custom retrieval strategies using the `@register_strategy` decorator. Strategies are organized in the `artemis/rag/strategies/` folder, similar to document converters.
+
+#### Built-in Strategies
+
+- **`semantic.py`** - Semantic vector search (MVP, primary strategy)
+- **`keyword.py`** - Keyword search placeholder (Phase 2)
+- **`hybrid.py`** - Hybrid search placeholder (Phase 2)
+
+#### Creating a Custom Strategy
+
+1. **Create a new strategy file** in `artemis/rag/strategies/`:
+
+```python
+# artemis/rag/strategies/my_custom_strategy.py
+from typing import List, Dict, Any
+from artemis.rag.core.retrieval import register_strategy, RetrievalMode, Retriever
+from artemis.utils import get_logger
+
+logger = get_logger(__name__)
+
+@register_strategy(RetrievalMode.KEYWORD)  # Or create a new RetrievalMode
+def my_custom_keyword_search(retriever: Retriever, query: str, k: int) -> List[Dict[str, Any]]:
+    """
+    Custom keyword search implementation.
+
+    Args:
+        retriever: Retriever instance (provides access to qdrant_client, etc.)
+        query: Search query string
+        k: Number of results to return
+
+    Returns:
+        List of dictionaries with 'text', 'score', and 'metadata' keys
+    """
+    # Your custom BM25 or keyword search logic here
+    # Access retriever.qdrant_client, retriever.collection_name, etc.
+    results = []
+    # ... implementation ...
+    return results
+```
+
+2. **Import it in `artemis/rag/strategies/__init__.py`**:
+
+```python
+# artemis/rag/strategies/__init__.py
+try:
+    from artemis.rag.strategies.my_custom_strategy import my_custom_keyword_search
+except ImportError:
+    pass
+```
+
+3. **Use your custom strategy**:
+
+```python
+from artemis.rag import Retriever, RetrievalMode
+
+retriever = Retriever(mode=RetrievalMode.KEYWORD)
+results = retriever.retrieve("Italian food", k=5)
+```
+
+**Note:** See `artemis/rag/strategies/example_custom.py` for a complete example template.
+
+### Why Multiple Search Strategies?
+
+Different retrieval modes excel in different scenarios:
+
+- **Semantic Search**: Best for natural-language, fuzzy queries (e.g., "restaurants with good ambiance")
+- **Keyword Search**: Best when exact terms matter (e.g., API names, IDs, legal citations)
+- **Hybrid Search**: Combines both for improved relevance and robustness
+
+This design makes A.R.T.E.M.I.S. suitable for diverse use cases:
+
+- **Dev Assistant** → Keyword/hybrid for exact API names
+- **Legal/Compliance Bot** → BM25/hybrid for precise citations
+- **Enterprise Search** → Hybrid for varied query types
+
+---
+
 ## 🎓 Examples
 
 ### Example 1: Restaurant Assistant
@@ -414,6 +539,7 @@ document = format_doc(doc_parts)
 from artemis import Agent
 
 # Initialize with restaurant data
+# Note: Uses Kaggle restaurant dataset (see Acknowledgments section)
 agent = Agent(
     data_path="./data/restaurants/",
     use_case="restaurant"
@@ -589,12 +715,22 @@ pip install artemis-sdk
 
 ## 🙏 Acknowledgments
 
+### Datasets
+
+- **Restaurant Dataset** - Used for MVP testing and examples
+  - Dataset: [Restaurant Dataset](https://www.kaggle.com/datasets/mohdshahnawazaadil/restaurant-dataset) by [mohdshahnawazaadil](https://www.kaggle.com/mohdshahnawazaadil)
+  - License: Please refer to the dataset's license on Kaggle
+  - Used for: Document conversion examples, RAG testing, and retrieval strategy validation
+
+### Libraries & Tools
+
 Built with:
 
 - [DSPy](https://github.com/stanfordnlp/dspy) - Prompt optimization
 - [LangChain](https://github.com/langchain-ai/langchain) - Agent orchestration
 - [Qdrant](https://qdrant.tech/) - Vector database
 - [Groq](https://groq.com/) - Fast LLM inference
+- [KaggleHub](https://github.com/Kaggle/kagglehub) - Dataset downloading and management
 
 ---
 

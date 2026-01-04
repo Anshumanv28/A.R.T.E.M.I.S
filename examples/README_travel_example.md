@@ -143,7 +143,7 @@ The travel converter is already implemented! It:
 1. **Create** `artemis/rag/converters/support.py`:
 
 ```python
-from artemis.rag.document_converter import register_schema, format_doc, DocumentSchema
+from artemis.rag.core.document_converter import register_schema, format_doc, DocumentSchema
 import pandas as pd
 
 @register_schema(DocumentSchema.SUPPORT)

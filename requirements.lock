@@ -113,7 +113,7 @@ kiwisolver==1.4.9
     # via
     #   -r requirements.txt
     #   matplotlib
-matplotlib==3.7.2
+matplotlib==3.10.8
     # via -r requirements.txt
 mcp==1.25.0
     # via -r requirements.txt
