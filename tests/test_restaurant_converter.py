@@ -23,16 +23,16 @@ except ImportError:
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import directly from document_converter to avoid retriever dependency
-from artemis.rag.document_converter import csv_to_documents, DocumentSchema
+# Import from artemis.rag (re-exports from core)
+from artemis.rag import csv_to_documents, DocumentSchema
 
-# Try to import retriever (optional for testing)
+# Try to import retriever and ingester (optional for testing)
 try:
-    from artemis.rag.retrieval import Retriever, RetrievalMode
+    from artemis.rag import Retriever, RetrievalMode, Ingester
     RETRIEVER_AVAILABLE = True
 except ImportError:
     RETRIEVER_AVAILABLE = False
-    print("⚠️  Retriever not available (qdrant_client not installed)")
+    print("⚠️  Retriever/Ingester not available (qdrant_client not installed)")
     print("   Will test document conversion only")
     print()
 
@@ -145,17 +145,17 @@ def test_conversion():
 
 
 def test_retriever_ingestion(doc_paths, metadata_path):
-    """Test retriever ingestion (reads files and deletes them)."""
+    """Test ingestion and retrieval (reads files and deletes them)."""
     if not doc_paths or not metadata_path:
-        print("Skipping retriever test (conversion failed)")
+        print("Skipping ingestion/retrieval test (conversion failed)")
         return
     
     if not RETRIEVER_AVAILABLE:
-        print("Skipping retriever test (retriever not available)")
+        print("Skipping ingestion/retrieval test (retriever not available)")
         return
     
     print("=" * 60)
-    print("Test 2: Retriever Ingestion (reads files, deletes after)")
+    print("Test 2: Ingestion and Retrieval (reads files, deletes after)")
     print("=" * 60)
     
     # Check if Qdrant is configured
@@ -163,8 +163,8 @@ def test_retriever_ingestion(doc_paths, metadata_path):
     qdrant_key = os.getenv("QDRANT_API_KEY")
     
     if not qdrant_url:
-        print("⚠️  QDRANT_URL not set - skipping retriever test")
-        print("   Set QDRANT_URL and QDRANT_API_KEY environment variables to test ingestion")
+        print("⚠️  QDRANT_URL not set - skipping ingestion/retrieval test")
+        print("   Set QDRANT_URL and QDRANT_API_KEY environment variables to test")
         print()
         from artemis.utils.paths import get_docs_dir
         print(f"Files will remain in {get_docs_dir()} folder for manual inspection")
@@ -172,14 +172,15 @@ def test_retriever_ingestion(doc_paths, metadata_path):
     
     try:
         print(f"Connecting to Qdrant: {qdrant_url}")
-        retriever = Retriever(
-            mode=RetrievalMode.SEMANTIC,
+        
+        # Use Ingester for document ingestion
+        ingester = Ingester(
             collection_name="test_restaurants",
             qdrant_url=qdrant_url,
             qdrant_api_key=qdrant_key
         )
         
-        print(f"✅ Retriever initialized")
+        print(f"✅ Ingester initialized")
         print(f"   Collection: test_restaurants")
         print()
         
@@ -191,7 +192,7 @@ def test_retriever_ingestion(doc_paths, metadata_path):
         
         # Ingest documents (will delete files after)
         print("Ingesting documents...")
-        retriever.add_documents(doc_paths, metadata_path)
+        ingester.add_documents(doc_paths, metadata_path)
         
         print("✅ Documents ingested successfully!")
         print()
@@ -211,19 +212,23 @@ def test_retriever_ingestion(doc_paths, metadata_path):
         
         print()
         
-        # Test retrieval
+        # Test retrieval using Retriever
         print("Test 3: Testing retrieval")
         print("-" * 60)
+        retriever = Retriever(
+            mode=RetrievalMode.SEMANTIC,
+            ingester=ingester  # Use the same ingester instance
+        )
         results = retriever.retrieve("Italian restaurants in Mumbai with rating above 4", k=3)
         print(f"✅ Retrieved {len(results)} results")
         print()
         print("Top result:")
         if results:
             print(f"   Score: {results[0].get('score', 'N/A'):.4f}")
-            print(f"   Text: {results[0].get('payload', {}).get('text', '')[:150]}...")
+            print(f"   Text: {results[0].get('text', '')[:150]}...")
         
     except Exception as e:
-        print(f"❌ Retriever test failed: {e}")
+        print(f"❌ Ingestion/retrieval test failed: {e}")
         import traceback
         traceback.print_exc()
         print()

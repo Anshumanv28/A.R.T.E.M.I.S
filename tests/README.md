@@ -11,11 +11,21 @@ Test the document conversion pipeline with restaurant data:
 python tests/test_restaurant_converter.py
 ```
 
+### Embeddings and Retrieval Test
+
+Test embeddings generation, storage, and retrieval:
+
+```bash
+# From project root
+python tests/test_embeddings_retrieval.py
+```
+
 Or from the tests directory:
 
 ```bash
 cd tests
 python test_restaurant_converter.py
+python test_embeddings_retrieval.py
 ```
 
 ## What the Tests Cover
@@ -27,12 +37,12 @@ python test_restaurant_converter.py
 - Saves metadata to JSON file
 - Verifies files are created correctly
 
-### Test 2: Retriever Ingestion (Optional)
+### Test 2: Ingestion and Retrieval (Optional)
 
-- Reads documents from files
+- Uses `Ingester` to read documents from files
 - Ingests into Qdrant vector database
 - Deletes files after successful ingestion
-- Tests retrieval functionality
+- Tests retrieval functionality using `Retriever`
 
 **Note:** Requires `QDRANT_URL` and `QDRANT_API_KEY` environment variables.
 
