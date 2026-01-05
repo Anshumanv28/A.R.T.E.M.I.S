@@ -41,10 +41,10 @@ A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** desi
 - **Advanced Vector Memory** - Qdrant semantic search for long-term context
 - **Data Chunking** - Intelligent text chunking for large datasets e.g faqs, reviews, menu (currently skipped for small datasets)
 - **Document Schema Converters** - Additional schema types for different use cases:
-  - ✅ **RESTAURANT** - Available now (MVP)
-  - 🔜 **TRAVEL** - Travel planning (cities, attractions, hotels) - Phase 2
-  - 🔜 **SUPPORT** - FAQ/support tickets - Phase 2
-  - 🔜 **ECOMMERCE** - Product catalogs - Phase 2
+  - ✅ **RESTAURANT** - Available now (MVP, fully implemented)
+  - ✅ **TRAVEL** - Travel planning (cities, attractions, hotels) - Available now
+  - 🔜 **SUPPORT** - FAQ/support tickets - Phase 2 (not yet implemented)
+  - 🔜 **ECOMMERCE** - Product catalogs - Phase 2 (not yet implemented)
 - **Frontend Dashboard** - React interface with tool selection (checkboxes/selectable boxes), configuration, memory management, and page navigation
 - **FastAPI Backend APIs** - Production-ready REST APIs for tools and memory
 - **Fine-Tuned Custom LLM** - Custom Llama3 70B model fine-tuned for your use-cases
@@ -423,37 +423,113 @@ This separation enables:
 - Shared resources between components
 - Extensible search strategies via decorator registration
 
-### File Ingestion and Chunking
+### File Ingestion Pipeline
 
-A.R.T.E.M.I.S. supports multiple file types and chunking strategies for flexible document processing:
+A.R.T.E.M.I.S. uses a **unified ingestion pipeline** that processes all file types through three main stages: **Loaders → Converters (CSV only) → Chunkers → Indexer**.
 
-**Supported File Types:**
+#### Pipeline Architecture
 
-- **CSV** - Structured data (row-based chunking)
-- **PDF** - PDF documents (fixed-size with overlap by default)
-- **DOCX** - Word documents (fixed-size with overlap by default)
-- **MD** - Markdown files (semantic chunking by default)
-- **TEXT** - Plain text files (fixed-size with overlap by default)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Ingestion Pipeline                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  File → Loader → Converter* → Chunker → Indexer             │
+│           │           │          │                           │
+│           │           │          └─── Unified Interface      │
+│           │           └─── CSV Only                          │
+│           └─── Format-Specific                              │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
 
-**Chunking Strategies:**
+* Converter step only applies to CSV files
+```
 
-- **`CSV_ROW`** - Row-based chunking for CSV files (default for CSV)
-- **`FIXED`** - Fixed-size chunks without overlap
-- **`FIXED_OVERLAP`** - Fixed-size chunks with overlap (default for PDF/DOCX/TEXT)
-- **`SEMANTIC`** - Sentence/paragraph-aware chunking (default for Markdown)
-- **`AGENTIC`** - LLM-driven chunking (Phase 2, placeholder)
+#### Pipeline Components
 
-**Default Strategy Mapping:**
+**1. Loaders** (`artemis/rag/ingestion/loaders/`)
+
+- **Purpose**: Extract raw content from files (format-specific file reading)
+- **What they do**: Read files and return raw data structures
+- **Supported Formats**:
+  - `load_csv(path)` → Returns `pandas.DataFrame`
+  - `load_pdf_text(path)` → Returns `str` (extracted text)
+  - `load_docx_text(path)` → Returns `str` (paragraph text)
+  - `load_md_text(path)` → Returns `str` (markdown content)
+  - `load_text(path)` → Returns `str` (plain text)
+- **Role**: Step 1 - File reading/extraction (format-aware, content-agnostic)
+
+**2. Converters** (`artemis/rag/ingestion/converters/`)
+
+- **Purpose**: Convert structured CSV data to formatted text documents (CSV-only infrastructure)
+- **What they do**: Transform CSV DataFrames → formatted document strings with schema-aware formatting
+- **Key Components**:
+  - `DocumentSchema` enum (RESTAURANT, TRAVEL, SUPPORT)
+  - `CSV_CONVERTERS` registry for schema-specific converters
+  - `register_csv_schema()` decorator
+  - `format_doc()` utility for document formatting
+  - `csv_to_documents()` main conversion function
+- **Role**: Step 1.5 - CSV-specific data transformation (only for CSV files)
+- **Note**: Other file types (PDF, DOCX, MD, TEXT) skip this step - their loaders already produce text
+
+**3. Chunkers** (`artemis/rag/ingestion/chunkers/`)
+
+- **Purpose**: Split content into chunks suitable for embedding and retrieval (unified interface for all file types)
+- **What they do**: Take raw content (DataFrame for CSV, text for others) → Return lists of documents + metadata
+- **All file types use chunkers** - they provide the unified interface
+- **Available Strategies**:
+  - **`CSV_ROW`** ✅ - Row-based chunking for CSV files (default for CSV)
+  - **`FIXED`** ✅ - Fixed-size chunks without overlap
+  - **`FIXED_OVERLAP`** ✅ - Fixed-size chunks with overlap (default for PDF/DOCX/TEXT)
+  - **`SEMANTIC`** ✅ - Sentence/paragraph-aware chunking (default for Markdown)
+  - **`AGENTIC`** ⚠️ - LLM-driven chunking (**Placeholder** - Phase 2, falls back to FIXED_OVERLAP)
+- **Role**: Step 2 - Content chunking (unified interface)
+
+**4. Indexer** (`artemis/rag/core/indexer.py`)
+
+- **Purpose**: Store chunked documents in vector database
+- **What they do**: Generate embeddings and store in Qdrant
+- **Role**: Step 3 - Document storage
+
+#### Pipeline Flow by File Type
+
+**CSV Files:**
+
+```
+CSV File → load_csv() → DataFrame
+       → csv_row_chunker() → Formatted Documents + Metadata → Indexer
+       (chunker handles conversion internally using converters/schemas)
+```
+
+**PDF/DOCX/TEXT Files:**
+
+```
+File → load_pdf_text() / load_docx_text() / load_text() → Text String
+   → FIXED_OVERLAP Chunker → Documents + Metadata → Indexer
+   (no converter needed - text goes directly to chunker)
+```
+
+**Markdown Files:**
+
+```
+MD File → load_md_text() → Text String
+      → SEMANTIC Chunker → Documents + Metadata → Indexer
+      (no converter needed - text goes directly to chunker)
+```
+
+#### Default Strategy Mapping
 
 ```python
-{
-    FileType.CSV: ChunkStrategy.CSV_ROW,
-    FileType.PDF: ChunkStrategy.FIXED_OVERLAP,
-    FileType.DOCX: ChunkStrategy.FIXED_OVERLAP,
-    FileType.MD: ChunkStrategy.SEMANTIC,
-    FileType.TEXT: ChunkStrategy.FIXED_OVERLAP,
+DEFAULT_CHUNK_FOR_FILETYPE = {
+    FileType.CSV: ChunkStrategy.CSV_ROW,           # CSV-specific chunker
+    FileType.PDF: ChunkStrategy.FIXED_OVERLAP,     # Text chunker
+    FileType.DOCX: ChunkStrategy.FIXED_OVERLAP,    # Text chunker
+    FileType.MD: ChunkStrategy.SEMANTIC,           # Semantic chunker
+    FileType.TEXT: ChunkStrategy.FIXED_OVERLAP,    # Text chunker
 }
 ```
+
+**Key Insight**: All file types use chunkers as the unified interface. The CSV chunker is special because it combines conversion + chunking in one step. Other chunkers only chunk text since their loaders already produce text.
 
 #### Basic File Ingestion
 
@@ -494,12 +570,29 @@ ingest_md("readme.md", indexer)
 ingest_text("notes.txt", indexer)
 ```
 
+#### Component Status
+
+**Fully Implemented:**
+
+- ✅ All Loaders (CSV, PDF, DOCX, MD, TEXT)
+- ✅ CSV Converter infrastructure (DocumentSchema, registry, format_doc)
+- ✅ CSV Schema Converters (RESTAURANT, TRAVEL)
+- ✅ Chunking Strategies (CSV_ROW, FIXED, FIXED_OVERLAP, SEMANTIC)
+- ✅ Semantic Retrieval Strategy
+
+**Placeholders (Phase 2):**
+
+- ⚠️ **Agentic Chunker** - Falls back to FIXED_OVERLAP chunking (LLM-driven chunking not yet implemented)
+- ⚠️ **Keyword Search Strategy** - Raises NotImplementedError (BM25/TF-IDF not yet implemented)
+- ⚠️ **Hybrid Search Strategy** - Raises NotImplementedError (semantic + keyword combination not yet implemented)
+- 🔜 **SUPPORT Schema Converter** - Not yet implemented
+
 #### Extending with Custom Chunkers
 
 You can register custom chunking strategies using the `@register_chunker` decorator:
 
 ```python
-from artemis.rag.core.chunker import register_chunker, ChunkStrategy
+from artemis.rag.ingestion.chunkers.registry import register_chunker, ChunkStrategy
 
 @register_chunker(ChunkStrategy("custom_manual"))
 def my_custom_chunker(text: str, **kwargs) -> Tuple[List[str], List[Dict]]:
@@ -563,9 +656,9 @@ You can register custom retrieval strategies using the `@register_strategy` deco
 
 #### Built-in Strategies
 
-- **`semantic.py`** - Semantic vector search (MVP, primary strategy)
-- **`keyword.py`** - Keyword search placeholder (Phase 2)
-- **`hybrid.py`** - Hybrid search placeholder (Phase 2)
+- **`semantic.py`** ✅ - Semantic vector search (MVP, fully implemented)
+- **`keyword.py`** ⚠️ - Keyword search (**Placeholder** - Phase 2, raises NotImplementedError)
+- **`hybrid.py`** ⚠️ - Hybrid search (**Placeholder** - Phase 2, raises NotImplementedError)
 
 #### Creating a Custom Strategy
 

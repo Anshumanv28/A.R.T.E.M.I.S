@@ -8,13 +8,13 @@ Orchestrates the load → chunk → index pipeline.
 from pathlib import Path
 from typing import Optional, Any, Union
 
-from artemis.rag.core.chunker import (
+from artemis.rag.ingestion.chunkers.registry import (
     FileType,
     ChunkStrategy,
     CHUNKERS,
     DEFAULT_CHUNK_FOR_FILETYPE,
 )
-from artemis.rag.core.loaders import (
+from artemis.rag.ingestion.loaders import (
     load_csv,
     load_pdf_text,
     load_docx_text,
@@ -22,14 +22,14 @@ from artemis.rag.core.loaders import (
     load_text,
 )
 from artemis.rag.core.indexer import Indexer
-from artemis.rag.core.document_converter import DocumentSchema
+from artemis.rag.ingestion.converters.csv_converter import DocumentSchema
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
 
 # Auto-register chunkers when ingestion module is imported
 try:
-    from artemis.rag.core.chunkers import (  # noqa: F401
+    from artemis.rag.ingestion.chunkers import (  # noqa: F401
         csv_row_chunker,
         fixed_chunker,
         fixed_overlap_chunker,
@@ -119,7 +119,7 @@ def ingest_file(
             f"Chunking strategy '{strategy.value}' is not registered. "
             f"Available strategies: {available_strategies}. "
             "You can register a custom chunker:\n"
-            "  from artemis.rag.core.chunker import register_chunker, ChunkStrategy\n"
+            "  from artemis.rag.ingestion.chunkers.registry import register_chunker, ChunkStrategy\n"
             f"  @register_chunker(ChunkStrategy('{strategy.value}'))\n"
             "  def my_chunker(raw, **kwargs): ..."
         )

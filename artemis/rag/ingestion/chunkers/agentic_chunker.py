@@ -7,7 +7,7 @@ This is a placeholder implementation for Phase 2.
 
 from typing import List, Dict, Tuple, Any, Optional
 
-from artemis.rag.core.chunker import register_chunker, ChunkStrategy
+from artemis.rag.ingestion.chunkers.registry import register_chunker, ChunkStrategy
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)

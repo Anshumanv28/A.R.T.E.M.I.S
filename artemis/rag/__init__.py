@@ -2,24 +2,14 @@
 RAG (Retrieval Augmented Generation) module for A.R.T.E.M.I.S.
 
 This module provides a clean interface to all RAG functionality:
-- Document conversion (core/document_converter.py)
 - Document indexing (core/indexer.py)
 - Document retrieval (core/retriever.py)
-- File ingestion with chunking (core/ingestion.py)
-- Schema converters (converters/)
+- File ingestion with chunking (ingestion/)
+- CSV schema converters (csv_schemas/)
 - Retrieval strategies (strategies/)
-- Chunking strategies (core/chunkers/)
 """
 
-# Import from core module (re-exports for backward compatibility)
-from artemis.rag.core import (
-    csv_to_documents,
-    DocumentSchema,
-    register_schema,
-    format_doc,
-)
-
-# Re-export core components for backward compatibility
+# Import core RAG components
 try:
     from artemis.rag.core import Retriever, RetrievalMode, register_strategy, Indexer
     _RETRIEVER_AVAILABLE = True
@@ -31,25 +21,13 @@ except ImportError:
     Indexer = None
     _RETRIEVER_AVAILABLE = False
 
-# Auto-register additional converters (travel, support, etc.)
-# These are registered when the converters module is imported
+# Import ingestion components
 try:
-    from artemis.rag import converters  # noqa: F401
-except ImportError:
-    # Converters module not available or not yet implemented
-    pass
-
-# Auto-register retrieval strategies (semantic, keyword, hybrid)
-# These are registered when the strategies module is imported
-try:
-    from artemis.rag import strategies  # noqa: F401
-except ImportError:
-    # Strategies module not available or not yet implemented
-    pass
-
-# Re-export chunking components
-try:
-    from artemis.rag.core import (
+    from artemis.rag.ingestion import (
+        csv_to_documents,
+        DocumentSchema,
+        register_csv_schema,
+        format_doc,
         FileType,
         ChunkStrategy,
         register_chunker,
@@ -60,8 +38,12 @@ try:
         ingest_md,
         ingest_text,
     )
-    _CHUNKING_AVAILABLE = True
+    _INGESTION_AVAILABLE = True
 except ImportError:
+    csv_to_documents = None
+    DocumentSchema = None
+    register_csv_schema = None
+    format_doc = None
     FileType = None
     ChunkStrategy = None
     register_chunker = None
@@ -71,18 +53,33 @@ except ImportError:
     ingest_docx = None
     ingest_md = None
     ingest_text = None
-    _CHUNKING_AVAILABLE = False
+    _INGESTION_AVAILABLE = False
 
-__all__ = [
-    "csv_to_documents",
-    "DocumentSchema",
-    "register_schema",
-    "format_doc",
-]
+# Auto-register CSV schema converters (restaurant, travel, support, etc.)
+# These are registered when the csv_schemas module is imported
+try:
+    from artemis.rag import csv_schemas  # noqa: F401
+except ImportError:
+    # CSV schemas module not available or not yet implemented
+    pass
 
-# Add chunking components to exports if available
-if _CHUNKING_AVAILABLE:
+# Auto-register retrieval strategies (semantic, keyword, hybrid)
+# These are registered when the strategies module is imported
+try:
+    from artemis.rag import strategies  # noqa: F401
+except ImportError:
+    # Strategies module not available or not yet implemented
+    pass
+
+__all__ = []
+
+# Add ingestion components to exports if available
+if _INGESTION_AVAILABLE:
     __all__.extend([
+        "csv_to_documents",
+        "DocumentSchema",
+        "register_csv_schema",
+        "format_doc",
         "FileType",
         "ChunkStrategy",
         "register_chunker",
@@ -94,7 +91,6 @@ if _CHUNKING_AVAILABLE:
         "ingest_text",
     ])
 
-# Add retriever and ingestion to exports if available
+# Add retriever and indexer to exports if available
 if _RETRIEVER_AVAILABLE:
     __all__.extend(["Retriever", "RetrievalMode", "Indexer", "register_strategy"])
-

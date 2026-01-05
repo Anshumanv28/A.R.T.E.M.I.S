@@ -6,7 +6,7 @@ You can add this to your own project and register it with A.R.T.E.M.I.S.
 """
 
 import pandas as pd
-from artemis.rag import DocumentSchema, register_schema, format_doc, csv_to_documents
+from artemis.rag import DocumentSchema, register_csv_schema, format_doc, csv_to_documents
 
 
 # Step 1: Define or use a schema for travel data
@@ -18,7 +18,7 @@ TRAVEL_SCHEMA = DocumentSchema.TRAVEL
 
 
 # Step 2: Create your converter function and register it
-@register_schema(TRAVEL_SCHEMA)
+@register_csv_schema(TRAVEL_SCHEMA)
 def convert_travel_bookings(csv_path: str):
     """
     Convert travel booking CSV to formatted text documents.

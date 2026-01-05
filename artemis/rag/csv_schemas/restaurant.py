@@ -8,13 +8,13 @@ semantic search.
 import pandas as pd
 from typing import List, Dict, Tuple
 
-from artemis.rag.core.document_converter import register_schema, format_doc, DocumentSchema
+from artemis.rag.ingestion.converters.csv_converter import register_csv_schema, format_doc, DocumentSchema
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
 
 
-@register_schema(DocumentSchema.RESTAURANT)
+@register_csv_schema(DocumentSchema.RESTAURANT)
 def convert_restaurants(csv_path: str) -> Tuple[List[str], List[Dict]]:
     """
     Convert restaurant CSV rows to formatted text documents.
@@ -68,10 +68,19 @@ def convert_restaurants(csv_path: str) -> Tuple[List[str], List[Dict]]:
         location = ", ".join(location_parts) if location_parts else city or "Unknown"
         
         # Format rating
-        rating_str = f"{rating:.1f}" if pd.notna(rating) else "N/A"
+        # Convert rating to float if it's a string, then format
+        try:
+            rating_float = float(rating) if pd.notna(rating) else None
+            rating_str = f"{rating_float:.1f}" if rating_float is not None else "N/A"
+        except (ValueError, TypeError):
+            rating_str = str(rating) if pd.notna(rating) else "N/A"
         
-        # Format cost
-        cost_str = f"{int(cost_for_two)}" if pd.notna(cost_for_two) else "N/A"
+        # Format cost (handle string values)
+        try:
+            cost_float = float(cost_for_two) if pd.notna(cost_for_two) else None
+            cost_str = f"{int(cost_float)}" if cost_float is not None else "N/A"
+        except (ValueError, TypeError):
+            cost_str = str(cost_for_two) if pd.notna(cost_for_two) else "N/A"
         currency = str(row.get("Currency", "")).strip() if pd.notna(row.get("Currency")) else ""
         if currency and cost_str != "N/A":
             cost_str = f"{cost_str} {currency}"

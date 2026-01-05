@@ -1,9 +1,8 @@
 """
-Document conversion utilities for A.R.T.E.M.I.S.
+CSV converter for A.R.T.E.M.I.S.
 
-Converts structured data (e.g., CSV) to text documents suitable for
-embedding and retrieval. Uses schema-specific converters for optimal
-semantic representation.
+Converts structured CSV data to text documents suitable for embedding and retrieval.
+Uses schema-specific converters for optimal semantic representation.
 """
 
 import os
@@ -27,8 +26,8 @@ logger = get_logger(__name__)
 
 # Import chunker (will be available after chunkers module is imported)
 try:
-    from artemis.rag.core.chunkers.csv_chunker import csv_row_chunker
-    from artemis.rag.core.chunker import CHUNKERS, ChunkStrategy
+    from artemis.rag.ingestion.chunkers.csv_chunker import csv_row_chunker
+    from artemis.rag.ingestion.chunkers.registry import CHUNKERS, ChunkStrategy
     _CHUNKERS_AVAILABLE = True
 except ImportError:
     _CHUNKERS_AVAILABLE = False
@@ -44,29 +43,29 @@ class DocumentSchema(str, Enum):
     SUPPORT = "support"
 
 
-# Registry for schema converters
-SCHEMA_CONVERTERS: Dict[DocumentSchema, Callable[[str], Tuple[List[str], List[Dict]]]] = {}
+# Registry for CSV schema converters
+CSV_CONVERTERS: Dict[DocumentSchema, Callable[[str], Tuple[List[str], List[Dict]]]] = {}
 
 
-def register_schema(schema: DocumentSchema):
+def register_csv_schema(schema: DocumentSchema):
     """
-    Decorator to register a converter function for a schema.
+    Decorator to register a converter function for a CSV schema.
     
-    Use this decorator to register custom schema converters. The decorated
+    Use this decorator to register custom CSV schema converters. The decorated
     function should take a csv_path (str) and return (documents, metadata).
     
     Args:
         schema: DocumentSchema enum value to register
         
     Example:
-        >>> @register_schema(DocumentSchema.RESTAURANT)
+        >>> @register_csv_schema(DocumentSchema.RESTAURANT)
         >>> def convert_restaurants(csv_path: str):
         >>>     # conversion logic
         >>>     return docs, metadata
     """
     def wrapper(func: Callable[[str], Tuple[List[str], List[Dict]]]):
-        SCHEMA_CONVERTERS[schema] = func
-        logger.debug(f"Registered converter for schema: {schema.value}")
+        CSV_CONVERTERS[schema] = func
+        logger.debug(f"Registered CSV converter for schema: {schema.value}")
         return func
     return wrapper
 
@@ -105,7 +104,7 @@ def _save_documents_to_files(
     documents: List[str],
     metadata: List[Dict],
     output_dir: Optional[Path] = None
-) -> Tuple[List[str], List[Dict]]:
+) -> Tuple[List[str], str]:
     """
     Save documents and metadata to files in the docs directory.
     
@@ -171,12 +170,6 @@ def _save_documents_to_files(
 
 
 def _auto_convert_csv(csv_path: str) -> Tuple[List[str], List[Dict]]:
-    """
-    Legacy auto-convert function (deprecated, use chunker instead).
-    
-    This function is kept for backward compatibility but should not be used
-    directly. Use the CSV chunker via csv_to_documents() instead.
-    """
     """
     Automatically convert CSV to documents using column headers.
     
@@ -273,9 +266,9 @@ def csv_to_documents(
             Tuple of (document_file_paths, metadata_file_path) where:
             - document_file_paths: List of paths to saved document .txt files
             - metadata_file_path: Path to metadata JSON file
-        
+            
     Example:
-        >>> from artemis.rag import csv_to_documents, DocumentSchema
+        >>> from artemis.rag.ingestion.converters.csv_converter import csv_to_documents, DocumentSchema
         >>> # In-memory mode (default, fast)
         >>> docs, metadata = csv_to_documents("data.csv")
         >>> # Use registered schema
@@ -313,20 +306,20 @@ def csv_to_documents(
             logger.info(f"Converting CSV to documents: path={csv_path}, schema={schema.value}")
             try:
                 # Check if schema is registered
-                if schema not in SCHEMA_CONVERTERS:
+                if schema not in CSV_CONVERTERS:
                     logger.error(f"Schema '{schema.value}' is not registered")
-                    available_schemas = [s.value for s in SCHEMA_CONVERTERS.keys()]
+                    available_schemas = [s.value for s in CSV_CONVERTERS.keys()]
                     raise NotImplementedError(
                         f"Schema '{schema.value}' is not implemented. "
                         f"Available schemas: {available_schemas}. "
                         "You can extend A.R.T.E.M.I.S by registering a converter:\n"
-                        "  from artemis.rag.core.document_converter import register_schema\n"
-                        f"  @register_schema(DocumentSchema.{schema.name})\n"
+                        "  from artemis.rag.ingestion.converters.csv_converter import register_csv_schema\n"
+                        f"  @register_csv_schema(DocumentSchema.{schema.name})\n"
                         "  def convert_your_schema(csv_path: str): ..."
                     )
                 
                 # Get and call the registered converter
-                converter = SCHEMA_CONVERTERS[schema]
+                converter = CSV_CONVERTERS[schema]
                 documents, metadata = converter(csv_path)
             except NotImplementedError:
                 # Re-raise NotImplementedError as-is
@@ -344,5 +337,6 @@ def csv_to_documents(
         doc_paths, metadata_path = _save_documents_to_files(documents, metadata, output_path)
         return doc_paths, metadata_path
     else:
-        # Return in-memory (backward compatibility)
+        # Return in-memory
         return documents, metadata
+

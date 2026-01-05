@@ -8,13 +8,13 @@ text documents optimized for semantic search.
 import pandas as pd
 from typing import List, Dict, Tuple
 
-from artemis.rag.core.document_converter import register_schema, format_doc, DocumentSchema
+from artemis.rag.ingestion.converters.csv_converter import register_csv_schema, format_doc, DocumentSchema
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
 
 
-@register_schema(DocumentSchema.TRAVEL)
+@register_csv_schema(DocumentSchema.TRAVEL)
 def convert_travel(csv_path: str) -> Tuple[List[str], List[Dict]]:
     """
     Convert travel booking CSV rows to formatted text documents.
@@ -90,11 +90,19 @@ def convert_travel(csv_path: str) -> Tuple[List[str], List[Dict]]:
         location_parts = [loc for loc in [city, country] if loc]
         location = ", ".join(location_parts) if location_parts else "Unknown"
         
-        # Format price
-        price_str = f"${int(price_per_night)}" if price_per_night is not None and pd.notna(price_per_night) else "N/A"
+        # Format price (handle string values)
+        try:
+            price_float = float(price_per_night) if price_per_night is not None and pd.notna(price_per_night) else None
+            price_str = f"${int(price_float)}" if price_float is not None else "N/A"
+        except (ValueError, TypeError):
+            price_str = str(price_per_night) if price_per_night is not None and pd.notna(price_per_night) else "N/A"
         
-        # Format rating
-        rating_str = f"{rating:.1f}" if rating is not None and pd.notna(rating) else "N/A"
+        # Format rating (handle string values)
+        try:
+            rating_float = float(rating) if rating is not None and pd.notna(rating) else None
+            rating_str = f"{rating_float:.1f}" if rating_float is not None else "N/A"
+        except (ValueError, TypeError):
+            rating_str = str(rating) if rating is not None and pd.notna(rating) else "N/A"
         
         # Format dates
         dates_str = ""

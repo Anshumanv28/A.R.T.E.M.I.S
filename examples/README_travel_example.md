@@ -107,7 +107,7 @@ results = retriever.retrieve("Hotels in Paris under $200 with free cancellation"
 
 ### Option 2: In A.R.T.E.M.I.S. Repository (For Development)
 
-If you're contributing to A.R.T.E.M.I.S. itself, you can add converters in the `artemis/rag/converters/` directory.
+If you're contributing to A.R.T.E.M.I.S. itself, you can add CSV schema converters in the `artemis/rag/csv_schemas/` directory.
 
 #### Project Structure
 
@@ -116,10 +116,10 @@ A.R.T.E.M.I.S/
 ├── artemis/
 │   └── rag/
 │       ├── document_converter.py  # Core converter (RESTAURANT)
-│       ├── converters/             # Additional converters
-│       │   ├── __init__.py        # Auto-imports converters
-│       │   ├── travel.py          # Travel converter ✅ Created
-│       │   └── support.py         # Support converter (future)
+│       ├── csv_schemas/           # CSV schema converters
+│       │   ├── __init__.py        # Auto-imports schema converters
+│       │   ├── travel.py          # Travel schema converter ✅ Created
+│       │   └── support.py         # Support schema converter (future)
 │       └── __init__.py            # Auto-registers converters
 └── examples/                       # Example converters and guides for users
     ├── travel_converter_example.py # Example travel converter
@@ -128,7 +128,7 @@ A.R.T.E.M.I.S/
     └── WHERE_TO_ADD_CONVERTERS.md  # This guide
 ```
 
-#### File: `artemis/rag/converters/travel.py`
+#### File: `artemis/rag/csv_schemas/travel.py`
 
 The travel converter is already implemented! It:
 
@@ -140,22 +140,22 @@ The travel converter is already implemented! It:
 
 #### Adding a New Converter (e.g., Support)
 
-1. **Create** `artemis/rag/converters/support.py`:
+1. **Create** `artemis/rag/csv_schemas/support.py`:
 
 ```python
-from artemis.rag.core.document_converter import register_schema, format_doc, DocumentSchema
+from artemis.rag.ingestion.converters.csv_converter import register_csv_schema, format_doc, DocumentSchema
 import pandas as pd
 
-@register_schema(DocumentSchema.SUPPORT)
+@register_csv_schema(DocumentSchema.SUPPORT)
 def convert_support(csv_path: str):
     # Your implementation
     ...
 ```
 
-2. **Add import** to `artemis/rag/converters/__init__.py`:
+2. **Add import** to `artemis/rag/csv_schemas/__init__.py`:
 
 ```python
-from artemis.rag.converters.support import convert_support
+from artemis.rag.csv_schemas.support import convert_support  # noqa: F401
 ```
 
 That's it! The converter is automatically registered when the module is imported.

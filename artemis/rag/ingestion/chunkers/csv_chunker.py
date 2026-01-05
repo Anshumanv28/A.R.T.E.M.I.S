@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from artemis.rag.core.chunker import register_chunker, ChunkStrategy
-from artemis.rag.core.document_converter import (
+from artemis.rag.ingestion.chunkers.registry import register_chunker, ChunkStrategy
+from artemis.rag.ingestion.converters.csv_converter import (
     format_doc,
     DocumentSchema,
-    SCHEMA_CONVERTERS,
+    CSV_CONVERTERS,
 )
 from artemis.utils import get_logger
 
@@ -59,21 +59,21 @@ def csv_row_chunker(
         logger.info(f"Chunking CSV using schema: {schema.value}")
         
         # Check if schema is registered
-        if schema not in SCHEMA_CONVERTERS:
+        if schema not in CSV_CONVERTERS:
             logger.error(f"Schema '{schema.value}' is not registered")
-            available_schemas = [s.value for s in SCHEMA_CONVERTERS.keys()]
+            available_schemas = [s.value for s in CSV_CONVERTERS.keys()]
             raise NotImplementedError(
                 f"Schema '{schema.value}' is not implemented. "
                 f"Available schemas: {available_schemas}. "
                 "You can extend A.R.T.E.M.I.S by registering a converter:\n"
-                "  from artemis.rag.core.document_converter import register_schema\n"
-                f"  @register_schema(DocumentSchema.{schema.name})\n"
+                "  from artemis.rag.ingestion.converters.csv_converter import register_csv_schema\n"
+                f"  @register_csv_schema(DocumentSchema.{schema.name})\n"
                 "  def convert_your_schema(csv_path: str): ..."
             )
         
         # Get and call the registered converter
         # Note: Schema converters take csv_path, not DataFrame
-        converter = SCHEMA_CONVERTERS[schema]
+        converter = CSV_CONVERTERS[schema]
         documents, metadata = converter(str(csv_path))
         
         logger.info(f"Schema-based conversion complete: {len(documents)} documents created")

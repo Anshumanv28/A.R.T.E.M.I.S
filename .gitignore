@@ -163,6 +163,7 @@ logs/
 *.sqlite
 *.sqlite3
 ROADMAP.md
+refactor_plan.md
 dev_help.txt
 dataset/
 artemis_data/ 
