@@ -3,6 +3,44 @@ Generic file ingestion helper for A.R.T.E.M.I.S.
 
 Provides a unified interface for ingesting various file types into the vector store.
 Orchestrates the load → chunk → index pipeline.
+
+**Architecture:**
+
+This module handles orchestration (file loading and chunking), while the Indexer
+(class from artemis.rag.core.indexer) handles storage (embedding and vector DB).
+
+**Why is Indexer passed as a parameter?**
+
+The Indexer manages persistent resources (Qdrant connection, embedder model) that
+are shared across multiple file ingestions. By passing the same Indexer instance
+to multiple ingest_file() calls, you ensure:
+
+- All files use the same embedding model (critical for consistent search)
+- All files are stored in the same collection
+- Efficient resource reuse (no duplicate connections/models)
+
+**Usage Pattern:**
+
+1. Create one Indexer instance (outside this module)
+2. Call ingest_file() for each file, passing the same Indexer
+3. Indexer stores all files in the same collection with consistent embeddings
+
+**Example:**
+```python
+from artemis.rag.core import Indexer
+from artemis.rag.ingestion import ingest_file, FileType
+
+# Step 1: Create Indexer once (manages connections)
+indexer = Indexer(
+    qdrant_url="http://localhost:6333",
+    collection_name="my_documents"
+)
+
+# Step 2: Ingest multiple files (reuse same indexer)
+ingest_file("document1.pdf", FileType.PDF, indexer)
+ingest_file("document2.txt", FileType.TEXT, indexer)
+ingest_file("data.csv", FileType.CSV, indexer)
+```
 """
 
 from pathlib import Path
@@ -52,16 +90,51 @@ def ingest_file(
     """
     Ingest a file into the vector store using the appropriate loader and chunker.
     
-    This is the main entry point for file ingestion. It handles:
-    1. Loading the file based on file type
-    2. Chunking using the specified or default strategy
-    3. Indexing the chunks into the vector store
+    This function orchestrates the ingestion pipeline: **Load → Chunk → Index**.
+    It handles file loading and chunking, then delegates storage to the provided
+    Indexer instance.
+    
+    **Pipeline Steps:**
+    1. **Load**: Reads file content based on file type (CSV, PDF, DOCX, MD, TEXT)
+    2. **Chunk**: Splits content into chunks using the specified strategy
+    3. **Index**: Stores chunks in the vector database (delegated to Indexer)
+    
+    **Why is an Indexer required?**
+    
+    The Indexer manages persistent resources (Qdrant connection, embedder model)
+    that are shared across multiple files. By passing the same Indexer instance
+    to multiple ingest_file() calls, you ensure:
+    
+    - All files use the same embedding model (critical for consistent search)
+    - All files are stored in the same collection
+    - Efficient resource reuse (no duplicate connections/models)
+    
+    The Indexer handles the final step: embedding chunks and storing them in
+    the vector database.
+    
+    **Typical Workflow:**
+    ```python
+    # Step 1: Create Indexer once (manages connections)
+    indexer = Indexer(
+        qdrant_url="http://localhost:6333",
+        collection_name="my_documents"
+    )
+    
+    # Step 2: Ingest multiple files (reuse same indexer)
+    ingest_file("document1.pdf", FileType.PDF, indexer)
+    ingest_file("document2.txt", FileType.TEXT, indexer)
+    ingest_file("data.csv", FileType.CSV, indexer)
+    ```
     
     Args:
         path: Path to the file to ingest
         file_type: FileType enum indicating the file format
-        indexer: Indexer instance to use for storing documents
+        indexer: Indexer instance to use for storing documents. Must be created
+                before calling this function. The Indexer manages the embedding
+                model and Qdrant connection. Reuse the same Indexer for multiple
+                files to share resources and store in the same collection.
         chunk_strategy: Optional ChunkStrategy. If None, uses default for file type.
+                       See DEFAULT_CHUNK_FOR_FILETYPE in chunkers.registry.
         schema: Optional DocumentSchema for CSV files (only used with CSV_ROW strategy)
         **chunk_kwargs: Additional keyword arguments passed to the chunker
                        (e.g., chunk_size, overlap for fixed chunkers)
@@ -72,16 +145,24 @@ def ingest_file(
         ImportError: If required dependencies for file type are missing
         
     Example:
-        >>> from artemis.rag.core import Indexer, FileType, ChunkStrategy
+        >>> from artemis.rag.core import Indexer
+        >>> from artemis.rag.ingestion import ingest_file, FileType
+        >>> 
+        >>> # Create Indexer (manages embedder + Qdrant connection)
         >>> indexer = Indexer(collection_name="docs")
-        >>> # Simple usage with defaults
+        >>> 
+        >>> # Ingest files (reuse same indexer for multiple files)
         >>> ingest_file("document.pdf", FileType.PDF, indexer)
+        >>> ingest_file("notes.txt", FileType.TEXT, indexer)
+        >>> 
         >>> # Override chunking strategy
         >>> ingest_file("document.pdf", FileType.PDF, indexer, 
         ...             chunk_strategy=ChunkStrategy.SEMANTIC)
+        >>> 
         >>> # With chunker parameters
         >>> ingest_file("document.txt", FileType.TEXT, indexer,
         ...             chunk_size=1500, overlap=300)
+        >>> 
         >>> # CSV with schema
         >>> ingest_file("restaurants.csv", FileType.CSV, indexer,
         ...             schema=DocumentSchema.RESTAURANT)

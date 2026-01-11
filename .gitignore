@@ -199,6 +199,7 @@ models/
 secrets/
 *.key
 *.pem
+ArtemisDB_api_key.txt
 
 # Frontend (React/Node)
 node_modules/

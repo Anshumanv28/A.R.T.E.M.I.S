@@ -59,6 +59,21 @@ class Retriever:
     Uses a registry pattern to delegate retrieval to registered strategy functions.
     Currently implements semantic vector search. Keyword and hybrid search
     can be added via the registry system.
+    
+    **Why is Indexer recommended but optional?**
+    
+    The Indexer parameter is a convenience that bundles together resources needed
+    for retrieval (embedder, Qdrant client, collection name). It's OPTIONAL but
+    RECOMMENDED because:
+    
+    1. **Guarantees consistency**: Ensures you use the same embedder model that
+       was used for indexing (critical - different models = broken search)
+    2. **Simpler API**: One parameter instead of multiple (embedder, qdrant_url,
+       collection_name)
+    3. **Prevents errors**: Can't accidentally use wrong embedder or collection
+    
+    You can create a Retriever without an Indexer, but you must manually ensure
+    the embedder and collection match what was used for indexing.
     """
     
     def __init__(
@@ -73,12 +88,31 @@ class Retriever:
         """
         Initialize the retriever.
         
+        **Recommended: Pass an Indexer instance** (ensures consistency)
+        
+        If you pass an Indexer, the Retriever automatically uses:
+        - The same embedder (critical for semantic search to work correctly)
+        - The same Qdrant connection
+        - The same collection name
+        
+        This guarantees that queries use the same embedding model that was used
+        to index the documents, which is required for consistent semantic search.
+        
+        **Alternative: Pass resources separately** (must match indexing configuration)
+        
+        You can also create a Retriever without an Indexer by providing:
+        - embedder: Embedder instance (MUST match the one used for indexing!)
+        - qdrant_url: Qdrant server URL (must match indexing configuration)
+        - collection_name: Collection name (MUST match the one used for indexing!)
+        
+        Use this approach only if you're doing retrieval-only (didn't create an
+        Indexer yourself) and need to manually specify resources.
+        
         Args:
             mode: Retrieval mode (SEMANTIC, KEYWORD, or HYBRID)
-            indexer: Optional Indexer instance. If provided, uses it for shared resources
-                     (Qdrant client, embedder, collection). This ensures the same embedder
-                     is used for both indexing and retrieval, which is required for
-                     consistent semantic search. If None, creates internal resources.
+            indexer: Optional Indexer instance. If provided, automatically uses its
+                    embedder, Qdrant client, and collection name. This is the
+                    RECOMMENDED approach as it guarantees consistency.
             embedder: Optional Embedder instance. Only used if indexer is None.
                      - If indexer is provided: Always uses indexer's embedder (ignores this parameter)
                      - If indexer is None and mode is SEMANTIC/HYBRID: Required, raises ValueError if not provided
@@ -88,15 +122,22 @@ class Retriever:
             collection_name: Name of the Qdrant collection (only used if indexer is None)
         
         Examples:
-            >>> # Recommended: Use indexer (shares embedder for consistency)
+            >>> # Recommended: Use Indexer (guarantees consistency)
             >>> indexer = Indexer(collection_name="docs")
-            >>> indexer.add_documents(docs, metadata)
+            >>> ingest_file("file.pdf", FileType.PDF, indexer)
             >>> retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
-            >>> # Uses indexer's embedder automatically
+            >>> # Uses same embedder/collection automatically
+            >>> results = retriever.retrieve("query", k=5)
             >>> 
-            >>> # Alternative: Pass embedder explicitly (for retrieval-only use)
+            >>> # Alternative: Without Indexer (must match configuration manually)
             >>> embedder = Embedder(model_name="all-MiniLM-L6-v2")
-            >>> retriever = Retriever(mode=RetrievalMode.SEMANTIC, embedder=embedder)
+            >>> retriever = Retriever(
+            ...     mode=RetrievalMode.SEMANTIC,
+            ...     embedder=embedder,  # Must match indexing embedder!
+            ...     qdrant_url="http://localhost:6333",
+            ...     collection_name="docs"  # Must match indexing collection!
+            ... )
+            >>> results = retriever.retrieve("query", k=5)
         """
         self.mode = mode
         self.collection_name = collection_name

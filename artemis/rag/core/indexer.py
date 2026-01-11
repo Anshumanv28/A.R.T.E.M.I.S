@@ -24,12 +24,30 @@ class Indexer:
     """
     Handles document indexing into the vector store.
     
-    Responsibilities:
-    - Document file reading (if file paths provided)
-    - Embedding generation using Embedder
-    - Qdrant collection management
-    - Document storage with metadata
-    - File cleanup after successful ingestion
+    This class manages persistent resources (embedding model, Qdrant connection)
+    that are shared across multiple file ingestions. Create one Indexer instance
+    and reuse it for multiple files to ensure all documents use the same embedding
+    model and are stored in the same collection.
+    
+    **Key Responsibilities:**
+    - Manages embedding model (creates or accepts Embedder instance)
+    - Maintains Qdrant connection (vector database client)
+    - Ensures collection exists with correct configuration
+    - Stores documents with embeddings in Qdrant
+    - Handles file cleanup after successful ingestion
+    
+    **Why reuse the same Indexer?**
+    
+    When you create one Indexer and reuse it for multiple files:
+    - All files use the same embedding model (critical for consistent search)
+    - All files are stored in the same collection
+    - Efficient resource reuse (no duplicate connections/models)
+    - Simpler API (pass same indexer to multiple ingest_file() calls)
+    
+    **Typical Workflow:**
+    1. Create one Indexer instance (manages connections)
+    2. Pass it to multiple ingest_file() calls (reuses same resources)
+    3. Pass it to Retriever (ensures same embedder for consistent search)
     """
     
     def __init__(
@@ -42,12 +60,32 @@ class Indexer:
         """
         Initialize the indexer.
         
+        Creates or accepts an Embedder instance and connects to Qdrant. The
+        embedder is used to generate embeddings for documents. The Qdrant connection
+        is used to store embeddings in the vector database.
+        
+        **Typical Usage:**
+        ```python
+        # Create once (manages connections)
+        indexer = Indexer(collection_name="my_docs")
+        
+        # Use with ingestion functions (reuse same instance)
+        from artemis.rag.ingestion import ingest_file, FileType
+        ingest_file("file1.pdf", FileType.PDF, indexer)
+        ingest_file("file2.txt", FileType.TEXT, indexer)
+        
+        # Use with Retriever (share same embedder)
+        from artemis.rag.core import Retriever, RetrievalMode
+        retriever = Retriever(indexer=indexer)
+        ```
+        
         Args:
             qdrant_url: Qdrant server URL (defaults to env var QDRANT_URL)
             qdrant_api_key: Qdrant API key (defaults to env var QDRANT_API_KEY)
-            collection_name: Name of the Qdrant collection
-            embedder: Optional Embedder instance. If None, creates a default Embedder.
-                     Pass an Embedder instance to use a custom model or share embedders.
+            collection_name: Name of the Qdrant collection where documents will be stored
+            embedder: Optional Embedder instance. If None, creates a default Embedder
+                     (model: "all-MiniLM-L6-v2"). Pass an Embedder instance to use
+                     a custom model or share embedders across multiple Indexers.
         """
         self.collection_name = collection_name
         
