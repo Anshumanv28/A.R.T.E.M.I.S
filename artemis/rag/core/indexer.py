@@ -12,7 +12,7 @@ from typing import List, Dict, Optional, Any, Union
 from uuid import uuid4
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, PayloadSchemaType
 
 from artemis.utils import get_logger
 from artemis.rag.core.embedder import Embedder
@@ -154,14 +154,63 @@ class Indexer:
                     ),
                 )
                 logger.info(f"Successfully created collection '{self.collection_name}'")
+                
+                # Create indexes for common metadata fields to enable filtering
+                self._create_metadata_indexes()
             else:
                 logger.debug(f"Collection '{self.collection_name}' already exists")
+                # Ensure indexes exist even if collection already exists
+                self._create_metadata_indexes()
         except Exception as e:
             logger.exception(
                 f"Error ensuring collection '{self.collection_name}' exists",
                 exc_info=True
             )
             raise
+    
+    def _create_metadata_indexes(self) -> None:
+        """
+        Create indexes for common metadata fields to enable filtering.
+        
+        Creates indexes for fields commonly used in filtering:
+        - city (keyword)
+        - rating (float)
+        - cost_for_two (integer)
+        - has_online_delivery (boolean)
+        - has_table_booking (boolean)
+        
+        These indexes are required by Qdrant for filtering operations.
+        """
+        # Common metadata fields that need indexes for filtering
+        metadata_indexes = [
+            ("city", PayloadSchemaType.KEYWORD),
+            ("rating", PayloadSchemaType.FLOAT),
+            ("cost_for_two", PayloadSchemaType.INTEGER),
+            ("has_online_delivery", PayloadSchemaType.BOOL),
+            ("has_table_booking", PayloadSchemaType.BOOL),
+        ]
+        
+        for field_name, field_type in metadata_indexes:
+            try:
+                # Try to create index - Qdrant will raise an error if it already exists
+                logger.debug(f"Creating index for metadata field '{field_name}' (type: {field_type})")
+                self.qdrant_client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field_name,
+                    field_schema=field_type,
+                )
+                logger.info(f"Successfully created index for '{field_name}'")
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check if index already exists (common error messages)
+                if "already exists" in error_str or "duplicate" in error_str:
+                    logger.debug(f"Index for '{field_name}' already exists")
+                else:
+                    # Other errors - log warning but don't fail
+                    logger.warning(
+                        f"Could not create index for '{field_name}': {e}. "
+                        "Filtering may not work for this field."
+                    )
     
     def add_documents(
         self,
