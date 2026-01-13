@@ -53,12 +53,13 @@ def semantic_search_strategy(retriever: Retriever, query: str, k: int) -> List[D
         query_embedding = retriever.embedder.encode_single(query)
         logger.debug("Generated query embedding")
         
-        # Search in Qdrant
-        search_results = retriever.qdrant_client.search(
+        # Search in Qdrant using query_points
+        query_response = retriever.qdrant_client.query_points(
             collection_name=retriever.collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=k,
         )
+        search_results = query_response.points
         logger.debug(f"Qdrant search returned {len(search_results)} results")
         
         # Format results
