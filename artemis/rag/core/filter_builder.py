@@ -7,7 +7,7 @@ in query_points() calls.
 
 from typing import List, Optional
 
-from qdrant_client.models import Filter, FieldCondition, Range, MatchValue
+from qdrant_client.models import Filter, FieldCondition, Range, MatchValue, MatchText
 
 from artemis.rag.core.query_parser import FilterCondition
 from artemis.utils import get_logger
@@ -80,9 +80,12 @@ def _build_field_condition(condition: FilterCondition) -> Optional[FieldConditio
     # Handle string equality
     if operator == "eq":
         if isinstance(value, str):
+            # Normalize string value: capitalize first letter of each word for better matching
+            # This helps with queries like "banglore" matching "Bangalore"
+            normalized_value = value.title()  # "banglore" -> "Banglore", "new delhi" -> "New Delhi"
             return FieldCondition(
                 key=field,
-                match=MatchValue(value=value)
+                match=MatchValue(value=normalized_value)
             )
         elif isinstance(value, bool):
             return FieldCondition(

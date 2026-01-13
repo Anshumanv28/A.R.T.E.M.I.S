@@ -16,6 +16,8 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, PayloadSch
 
 from artemis.utils import get_logger
 from artemis.rag.core.embedder import Embedder
+from artemis.rag.core.metadata_discovery import MetadataDiscovery
+from artemis.rag.core.metadata_config import MetadataConfig
 
 logger = get_logger(__name__)
 
@@ -56,6 +58,7 @@ class Indexer:
         qdrant_api_key: Optional[str] = None,
         collection_name: str = "artemis_documents",
         embedder: Optional[Embedder] = None,
+        metadata_config: Optional[MetadataConfig] = None,
     ):
         """
         Initialize the indexer.
@@ -86,8 +89,10 @@ class Indexer:
             embedder: Optional Embedder instance. If None, creates a default Embedder
                      (model: "all-MiniLM-L6-v2"). Pass an Embedder instance to use
                      a custom model or share embedders across multiple Indexers.
+            metadata_config: Optional metadata configuration for custom field mappings
         """
         self.collection_name = collection_name
+        self.metadata_config = metadata_config
         
         # Initialize embedder
         if embedder is not None:
@@ -170,25 +175,64 @@ class Indexer:
     
     def _create_metadata_indexes(self) -> None:
         """
-        Create indexes for common metadata fields to enable filtering.
+        Create indexes for metadata fields to enable filtering.
         
-        Creates indexes for fields commonly used in filtering:
-        - city (keyword)
-        - rating (float)
-        - cost_for_two (integer)
-        - has_online_delivery (boolean)
-        - has_table_booking (boolean)
+        Auto-discovers fields from existing documents in the collection and creates
+        indexes for them. Falls back to hardcoded common fields if discovery fails
+        (backward compatible).
         
-        These indexes are required by Qdrant for filtering operations.
+        If metadata_config is provided, uses it to determine which fields to index.
         """
-        # Common metadata fields that need indexes for filtering
-        metadata_indexes = [
-            ("city", PayloadSchemaType.KEYWORD),
-            ("rating", PayloadSchemaType.FLOAT),
-            ("cost_for_two", PayloadSchemaType.INTEGER),
-            ("has_online_delivery", PayloadSchemaType.BOOL),
-            ("has_table_booking", PayloadSchemaType.BOOL),
-        ]
+        metadata_indexes = []
+        
+        # Try to discover fields from existing documents
+        try:
+            discovery = MetadataDiscovery(
+                qdrant_client=self.qdrant_client,
+                collection_name=self.collection_name
+            )
+            discovered_fields = discovery.discover_fields()
+            
+            if discovered_fields:
+                # Map discovered field types to Qdrant schema types
+                type_mapping = {
+                    "string": PayloadSchemaType.KEYWORD,
+                    "number": PayloadSchemaType.FLOAT,  # Use FLOAT for all numbers
+                    "boolean": PayloadSchemaType.BOOL,
+                }
+                
+                for field_name, field_type in discovered_fields.items():
+                    qdrant_type = type_mapping.get(field_type)
+                    if qdrant_type:
+                        metadata_indexes.append((field_name, qdrant_type))
+                
+                logger.debug(f"Discovered {len(metadata_indexes)} fields to index from collection")
+        except Exception as e:
+            logger.warning(f"Failed to discover fields from collection: {e}. Using fallback fields.")
+            discovered_fields = {}
+        
+        # If no discovered fields and metadata_config provided, use config
+        if not metadata_indexes and self.metadata_config and self.metadata_config.field_types:
+            type_mapping = {
+                "string": PayloadSchemaType.KEYWORD,
+                "number": PayloadSchemaType.FLOAT,
+                "boolean": PayloadSchemaType.BOOL,
+            }
+            for field_name, field_type in self.metadata_config.field_types.items():
+                qdrant_type = type_mapping.get(field_type.lower())
+                if qdrant_type:
+                    metadata_indexes.append((field_name, qdrant_type))
+        
+        # Fallback to hardcoded common fields if still no fields (backward compatible)
+        if not metadata_indexes:
+            logger.debug("No fields discovered, using fallback common fields")
+            metadata_indexes = [
+                ("city", PayloadSchemaType.KEYWORD),
+                ("rating", PayloadSchemaType.FLOAT),
+                ("cost_for_two", PayloadSchemaType.INTEGER),
+                ("has_online_delivery", PayloadSchemaType.BOOL),
+                ("has_table_booking", PayloadSchemaType.BOOL),
+            ]
         
         for field_name, field_type in metadata_indexes:
             try:

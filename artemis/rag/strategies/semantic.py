@@ -5,14 +5,18 @@ Implements semantic vector search using embeddings and Qdrant.
 This is the primary retrieval strategy for MVP.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from artemis.rag.core.retriever import register_strategy, RetrievalMode, Retriever
 from artemis.rag.core.query_parser import parse_query
 from artemis.rag.core.filter_builder import build_qdrant_filter
+from artemis.rag.core.metadata_discovery import MetadataDiscovery
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
+
+# Cache for metadata discovery instances per retriever
+_discovery_cache: Dict[str, MetadataDiscovery] = {}
 
 
 @register_strategy(RetrievalMode.SEMANTIC)
@@ -51,8 +55,30 @@ def semantic_search_strategy(retriever: Retriever, query: str, k: int) -> List[D
         raise ValueError("Embedder is required for semantic search")
     
     try:
-        # Parse query to extract filter conditions
-        cleaned_query, filter_conditions = parse_query(query)
+        # Initialize metadata discovery (lazy, cached per collection)
+        discovery_key = f"{retriever.collection_name}_{id(retriever.qdrant_client)}"
+        if discovery_key not in _discovery_cache:
+            _discovery_cache[discovery_key] = MetadataDiscovery(
+                qdrant_client=retriever.qdrant_client,
+                collection_name=retriever.collection_name
+            )
+        discovery = _discovery_cache[discovery_key]
+        
+        # Discover fields (cached internally)
+        discovered_fields = discovery.discover_fields()
+        
+        # Get metadata config from retriever if available
+        metadata_config = getattr(retriever, 'metadata_config', None)
+        
+        # Parse query to extract filter conditions using discovered fields
+        cleaned_query, filter_conditions = parse_query(
+            query,
+            discovered_fields=discovered_fields,
+            metadata_config=metadata_config
+        )
+        
+        if filter_conditions:
+            logger.debug(f"Extracted {len(filter_conditions)} filter condition(s): {filter_conditions}")
         
         # Build Qdrant filter if conditions found
         qdrant_filter = None
@@ -60,7 +86,9 @@ def semantic_search_strategy(retriever: Retriever, query: str, k: int) -> List[D
             try:
                 qdrant_filter = build_qdrant_filter(filter_conditions)
                 if qdrant_filter:
-                    logger.debug(f"Applied metadata filter with {len(filter_conditions)} condition(s)")
+                    logger.info(f"Applied metadata filter with {len(filter_conditions)} condition(s): {filter_conditions}")
+                else:
+                    logger.warning("Failed to build Qdrant filter (returned None). Proceeding without filter.")
             except Exception as e:
                 logger.warning(f"Failed to build Qdrant filter: {e}. Proceeding without filter.")
                 qdrant_filter = None
@@ -91,13 +119,16 @@ def semantic_search_strategy(retriever: Retriever, query: str, k: int) -> List[D
             if "index required" in error_str or "index not found" in error_str:
                 logger.warning(
                     f"Metadata index missing for filter. Error: {e}. "
-                    "Retrying without filter. Consider creating indexes for metadata fields."
+                    "Retrying without filter using original query. Consider creating indexes for metadata fields."
                 )
-                # Retry without filter
+                # Retry without filter, but use original query (not cleaned) for better semantic matching
                 query_params.pop("query_filter", None)
+                # Re-embed the original query for better results
+                original_embedding = retriever.embedder.encode_single(query)
+                query_params["query"] = original_embedding
                 query_response = retriever.qdrant_client.query_points(**query_params)
                 search_results = query_response.points
-                logger.debug(f"Qdrant search (without filter) returned {len(search_results)} results")
+                logger.debug(f"Qdrant search (without filter, original query) returned {len(search_results)} results")
             else:
                 # Re-raise other errors
                 raise

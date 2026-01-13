@@ -14,6 +14,7 @@ from qdrant_client import QdrantClient
 from artemis.utils import get_logger
 from artemis.rag.core.indexer import Indexer
 from artemis.rag.core.embedder import Embedder
+from artemis.rag.core.metadata_config import MetadataConfig
 
 logger = get_logger(__name__)
 
@@ -84,6 +85,7 @@ class Retriever:
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
         collection_name: str = "artemis_documents",
+        metadata_config: Optional[MetadataConfig] = None,
     ):
         """
         Initialize the retriever.
@@ -120,6 +122,7 @@ class Retriever:
             qdrant_url: Qdrant server URL (defaults to env var QDRANT_URL, only used if indexer is None)
             qdrant_api_key: Qdrant API key (defaults to env var QDRANT_API_KEY, only used if indexer is None)
             collection_name: Name of the Qdrant collection (only used if indexer is None)
+            metadata_config: Optional metadata configuration for custom field mappings and aliases
         
         Examples:
             >>> # Recommended: Use Indexer (guarantees consistency)
@@ -140,16 +143,22 @@ class Retriever:
             >>> results = retriever.retrieve("query", k=5)
         """
         self.mode = mode
-        self.collection_name = collection_name
-        
-        logger.info(f"Initializing Retriever with mode={mode.value}, collection={collection_name}")
+        self.metadata_config = metadata_config
         
         # Use provided indexer or create internal resources
         if indexer is not None:
             self.indexer = indexer
             self.qdrant_client = indexer.qdrant_client
             self.embedder = indexer.embedder
+            # Use collection name from indexer (critical!)
+            if not hasattr(indexer, 'collection_name') or indexer.collection_name is None:
+                raise ValueError(
+                    "Indexer must have a valid collection_name. "
+                    f"Got: {getattr(indexer, 'collection_name', 'None')}"
+                )
+            self.collection_name = indexer.collection_name
             logger.debug("Using provided Indexer instance")
+            logger.info(f"Initializing Retriever with mode={mode.value}, collection={self.collection_name} (from Indexer)")
         else:
             # Create internal resources for retrieval only
             qdrant_url = qdrant_url or os.getenv("QDRANT_URL")
@@ -188,7 +197,15 @@ class Retriever:
             else:
                 self.embedder = None
             
+            # Use provided collection_name (only used when indexer is None)
+            if not collection_name:
+                raise ValueError(
+                    "collection_name is required when indexer is not provided. "
+                    "Either pass an Indexer instance or provide collection_name parameter."
+                )
+            self.collection_name = collection_name
             self.indexer = None
+            logger.info(f"Initializing Retriever with mode={mode.value}, collection={collection_name}")
         
         # Keyword search index (for future implementation)
         self.keyword_index = None
@@ -238,7 +255,29 @@ class Retriever:
         Raises:
             NotImplementedError: If no strategy is registered for the current mode
         """
-        logger.info(f"Retrieving documents: mode={self.mode.value}, query='{query[:50]}...', k={k}")
+        # Validate collection_name is set
+        if not hasattr(self, 'collection_name') or not self.collection_name:
+            raise ValueError(
+                "Retriever collection_name is not set. "
+                "This should not happen - please report this bug."
+            )
+        
+        # Verify collection exists
+        try:
+            collection_info = self.qdrant_client.get_collection(self.collection_name)
+            logger.debug(f"Collection '{self.collection_name}' exists with {collection_info.points_count} points")
+        except Exception as e:
+            error_str = str(e).lower()
+            if "not found" in error_str or "doesn't exist" in error_str:
+                raise ValueError(
+                    f"Collection '{self.collection_name}' does not exist in Qdrant. "
+                    f"Available collections can be listed with: "
+                    f"retriever.qdrant_client.get_collections()"
+                ) from e
+            else:
+                logger.warning(f"Could not verify collection existence: {e}")
+        
+        logger.info(f"Retrieving documents: mode={self.mode.value}, query='{query[:50]}...', k={k}, collection={self.collection_name}")
         
         if self.mode not in RETRIEVAL_STRATEGIES:
             available_modes = [m.value for m in RETRIEVAL_STRATEGIES.keys()]
