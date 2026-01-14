@@ -5,7 +5,7 @@ This module provides a clean interface to all RAG functionality:
 - Document indexing (core/indexer.py)
 - Document retrieval (core/retriever.py)
 - File ingestion with chunking (ingestion/)
-- CSV schema converters (csv_schemas/)
+- CSV schema converters (ingestion/converters/schemas/)
 - Retrieval strategies (strategies/)
 """
 
@@ -56,9 +56,9 @@ except ImportError:
     _INGESTION_AVAILABLE = False
 
 # Auto-register CSV schema converters (restaurant, travel, support, etc.)
-# These are registered when the csv_schemas module is imported
+# These are registered when the schemas module is imported
 try:
-    from artemis.rag import csv_schemas  # noqa: F401
+    from artemis.rag.ingestion.converters import schemas  # noqa: F401
 except ImportError:
     # CSV schemas module not available or not yet implemented
     pass

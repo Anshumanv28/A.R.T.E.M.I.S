@@ -156,4 +156,3 @@ def convert_travel(csv_path: str) -> Tuple[List[str], List[Dict]]:
     
     logger.info(f"Conversion complete: {len(documents)} travel documents created")
     return documents, metadata_list
-

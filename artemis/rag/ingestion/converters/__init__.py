@@ -12,6 +12,14 @@ from artemis.rag.ingestion.converters.csv_converter import (
     csv_to_documents,
 )
 
+# Auto-register CSV schema converters (restaurant, travel, support, etc.)
+# These are registered when the schemas module is imported
+try:
+    from artemis.rag.ingestion.converters import schemas  # noqa: F401
+except ImportError:
+    # CSV schemas module not available or not yet implemented
+    pass
+
 __all__ = [
     "DocumentSchema",
     "CSV_CONVERTERS",

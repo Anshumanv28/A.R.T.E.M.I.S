@@ -220,7 +220,7 @@ class TestCSVConverterRegistry:
     def test_csv_converters_registry(self):
         """Test CSV_CONVERTERS registry."""
         assert isinstance(CSV_CONVERTERS, dict)
-        # RESTAURANT and TRAVEL should be registered if csv_schemas module imported
+        # RESTAURANT and TRAVEL should be registered if schemas module imported
         # This test just checks the registry exists
     
     def test_register_csv_schema_decorator(self):

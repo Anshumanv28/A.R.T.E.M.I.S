@@ -133,4 +133,3 @@ def convert_restaurants(csv_path: str) -> Tuple[List[str], List[Dict]]:
         logger.warning(f"Skipped {skipped_rows} rows during conversion")
     
     return documents, metadata_list
-

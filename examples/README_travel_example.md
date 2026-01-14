@@ -107,7 +107,7 @@ results = retriever.retrieve("Hotels in Paris under $200 with free cancellation"
 
 ### Option 2: In A.R.T.E.M.I.S. Repository (For Development)
 
-If you're contributing to A.R.T.E.M.I.S. itself, you can add CSV schema converters in the `artemis/rag/csv_schemas/` directory.
+If you're contributing to A.R.T.E.M.I.S. itself, you can add CSV schema converters in the `artemis/rag/ingestion/converters/schemas/` directory.
 
 #### Project Structure
 
@@ -115,20 +115,23 @@ If you're contributing to A.R.T.E.M.I.S. itself, you can add CSV schema converte
 A.R.T.E.M.I.S/
 ├── artemis/
 │   └── rag/
-│       ├── document_converter.py  # Core converter (RESTAURANT)
-│       ├── csv_schemas/           # CSV schema converters
-│       │   ├── __init__.py        # Auto-imports schema converters
-│       │   ├── travel.py          # Travel schema converter ✅ Created
-│       │   └── support.py         # Support schema converter (future)
-│       └── __init__.py            # Auto-registers converters
-└── examples/                       # Example converters and guides for users
-    ├── travel_converter_example.py # Example travel converter
-    ├── travel_bookings_sample.csv  # Sample CSV data
-    ├── README_travel_example.md    # Travel example documentation
-    └── WHERE_TO_ADD_CONVERTERS.md  # This guide
+│       ├── ingestion/
+│       │   └── converters/
+│       │       ├── csv_converter.py  # Core converter infrastructure
+│       │       └── schemas/          # CSV schema converters
+│       │           ├── __init__.py   # Auto-imports schema converters
+│       │           ├── restaurant.py # Restaurant schema converter
+│       │           ├── travel.py      # Travel schema converter ✅ Created
+│       │           └── support.py    # Support schema converter (future)
+│       └── __init__.py               # Auto-registers converters
+└── examples/                          # Example converters and guides for users
+    ├── travel_converter_example.py    # Example travel converter
+    ├── travel_bookings_sample.csv     # Sample CSV data
+    ├── README_travel_example.md       # Travel example documentation
+    └── WHERE_TO_ADD_CONVERTERS.md     # This guide
 ```
 
-#### File: `artemis/rag/csv_schemas/travel.py`
+#### File: `artemis/rag/ingestion/converters/schemas/travel.py`
 
 The travel converter is already implemented! It:
 
@@ -140,7 +143,7 @@ The travel converter is already implemented! It:
 
 #### Adding a New Converter (e.g., Support)
 
-1. **Create** `artemis/rag/csv_schemas/support.py`:
+1. **Create** `artemis/rag/ingestion/converters/schemas/support.py`:
 
 ```python
 from artemis.rag.ingestion.converters.csv_converter import register_csv_schema, format_doc, DocumentSchema
@@ -152,10 +155,10 @@ def convert_support(csv_path: str):
     ...
 ```
 
-2. **Add import** to `artemis/rag/csv_schemas/__init__.py`:
+2. **Add import** to `artemis/rag/ingestion/converters/schemas/__init__.py`:
 
 ```python
-from artemis.rag.csv_schemas.support import convert_support  # noqa: F401
+from artemis.rag.ingestion.converters.schemas.support import convert_support  # noqa: F401
 ```
 
 That's it! The converter is automatically registered when the module is imported.
