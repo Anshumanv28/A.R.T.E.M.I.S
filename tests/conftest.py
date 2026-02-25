@@ -3,9 +3,42 @@ Pytest fixtures and utilities for A.R.T.E.M.I.S. tests.
 """
 
 import tempfile
-import pandas as pd
 from pathlib import Path
-from typing import Generator
+from typing import Any, Dict, List
+
+import pytest
+
+
+# --- Agent fixtures (for test_agent_*.py) ---
+
+
+class MockRetriever:
+    """Mock retriever for agent tests; no Qdrant required."""
+
+    def __init__(self, docs: List[Dict[str, Any]] = None):
+        self.docs = docs or [{"text": "Test doc.", "score": 0.9, "metadata": {}}]
+        self.retrieve_calls = []
+
+    def retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        self.retrieve_calls.append((query, k))
+        return self.docs[:k]
+
+
+@pytest.fixture
+def mock_retriever():
+    """Retriever mock with retrieve(query, k=5) returning a fixed list of doc dicts."""
+    return MockRetriever()
+
+
+@pytest.fixture
+def agent_config():
+    """AgentConfig with test API key so tests don't depend on env."""
+    from artemis.agent.config import AgentConfig
+    return AgentConfig(
+        provider="groq",
+        groq_api_key="test-key",
+        max_tool_steps=10,
+    )
 
 
 def create_temp_csv(content: str = None) -> Path:

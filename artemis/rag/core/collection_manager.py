@@ -180,7 +180,9 @@ def get_collection_info(
     except Exception as e:
         error_str = str(e).lower()
         if "not found" in error_str or "doesn't exist" in error_str:
-            raise ValueError(f"Collection '{collection_name}' does not exist") from e
+            raise ValueError(
+                f"Collection '{collection_name}' does not exist in Qdrant (it was not found; this does not mean it was deleted)."
+            ) from e
         logger.exception(f"Failed to get collection info: {e}")
         raise
 
@@ -231,7 +233,9 @@ def delete_collection(
     except Exception as e:
         error_str = str(e).lower()
         if "not found" in error_str or "doesn't exist" in error_str:
-            raise ValueError(f"Collection '{collection_name}' does not exist") from e
+            raise ValueError(
+                f"Collection '{collection_name}' does not exist in Qdrant (not found; not necessarily deleted)."
+            ) from e
         logger.exception(f"Failed to delete collection: {e}")
         raise
 
@@ -330,6 +334,8 @@ def clear_collection(
     except Exception as e:
         error_str = str(e).lower()
         if "not found" in error_str or "doesn't exist" in error_str:
-            raise ValueError(f"Collection '{collection_name}' does not exist") from e
+            raise ValueError(
+                f"Collection '{collection_name}' does not exist in Qdrant (not found; not necessarily deleted)."
+            ) from e
         logger.exception(f"Failed to clear collection: {e}")
         raise

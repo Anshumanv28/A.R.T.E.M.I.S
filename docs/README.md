@@ -5,6 +5,7 @@ Documentation index for the A.R.T.E.M.I.S. project.
 ## Project documentation
 
 - **[Architecture Flow](ARCHITECTURE_FLOW.md)** – System architecture and data flow
+- **[Agent architecture](AGENT_ARCHITECTURE.md)** – ReAct-style planner–executor, tool registry, and RAG as a tool
 - **[RAG usage](RAG_USAGE.md)** – How to use the RAG system standalone and with the agent, including all RAG tools
 - **[Roadmap](ROADMAP.md)** – Project roadmap and milestones (if present)
 

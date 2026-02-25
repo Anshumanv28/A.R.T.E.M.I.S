@@ -28,6 +28,7 @@ class AgentConfig:
     max_tokens: int = 2048
     temperature: float = 0.7
     retrieval_k: int = 5
+    max_tool_steps: int = 10  # Cap on tool calls per turn; planner should move to direct when at limit
     
     groq_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
@@ -67,6 +68,7 @@ class AgentConfig:
             max_tokens=int(kwargs.get("max_tokens", os.getenv("ARTEMIS_MAX_TOKENS", "2048"))),
             temperature=float(kwargs.get("temperature", os.getenv("ARTEMIS_TEMPERATURE", "0.7"))),
             retrieval_k=int(kwargs.get("retrieval_k", os.getenv("ARTEMIS_RETRIEVAL_K", "5"))),
+            max_tool_steps=int(kwargs.get("max_tool_steps", os.getenv("ARTEMIS_MAX_TOOL_STEPS", "10"))),
             groq_api_key=kwargs.get("groq_api_key"),
             openai_api_key=kwargs.get("openai_api_key"),
         )

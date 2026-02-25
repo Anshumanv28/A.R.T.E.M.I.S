@@ -59,26 +59,24 @@ For more detail on the pipeline and parameters, see [ARCHITECTURE_FLOW.md](ARCHI
 
 ## Using RAG with the agent
 
-Use the **same** Indexer and Retriever for ingestion and for the agent:
+The agent uses RAG **via a central tool registry**, not a dedicated RAG path. The planner sees all available tools (including `search_documents`, `ingest_file`, and collection management). When the planner decides the user needs to search the knowledge base, it chooses the `search_documents` tool; the tool node runs it and the direct-answer node then synthesizes from the results. So RAG is one tool among many—the agent is not hard-wired to retrieval.
 
 1. Create `Indexer` and optionally ingest files (as above).
 2. Create `Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)`.
-3. Pass the retriever into the agent:
+3. Run the agent (it builds a registry and registers RAG tools internally):
 
    ```python
    from artemis.agent import run_agent
 
-   result = run_agent("What is the main topic?", retriever=retriever)
+   result = run_agent("What is the main topic?", retriever=retriever, indexer=indexer)
    print(result["final_answer"])
    ```
 
-The planner node classifies the query; when it decides the intent is `"rag"`, the RAG node calls `retriever.retrieve(...)` and then the LLM synthesizes an answer with citations. So the agent already uses your RAG data when retrieval is needed.
+You can also pass a pre-built `ToolRegistry` via `run_agent(..., registry=my_registry)` and omit retriever/indexer if your registry already includes the tools you need. See [Agent architecture](AGENT_ARCHITECTURE.md) for the planner–tool loop and registry design.
 
 ## RAG tools for the agent
 
-When you add a **tool-calling node** (or ReAct loop) to the agent, you can register the following as callable tools so the agent can perform the same RAG operations a user can.
-
-All tools live in `artemis.rag.tools` and are thin wrappers around the existing RAG and collection-manager APIs.
+The agent uses a **central tool registry**. `run_agent` builds a registry and registers the following RAG tools by default (from `artemis.rag.tools`), so the planner can choose when to search, ingest, or manage collections. There is no special RAG path—RAG is invoked when the planner selects the appropriate tool.
 
 | Tool | Factory / callable | Purpose |
 |------|--------------------|---------|

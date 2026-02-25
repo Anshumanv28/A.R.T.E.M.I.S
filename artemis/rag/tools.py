@@ -94,6 +94,64 @@ def create_rag_ingest_tool(
     return ingest
 
 
+def create_rag_ingest_directory_tool(
+    indexer: "Indexer",
+    default_extension: str = "md",
+) -> Callable[[str, str], Dict[str, Any]]:
+    """
+    Create a tool that ingests all files in a directory with a given extension.
+
+    Returns a callable (directory_path: str, file_extension: str) -> dict with
+    ok, ingested_count, failed_count, errors (list of str).
+    file_extension defaults to "md" (markdown). Use "pdf", "txt", etc. for other types.
+    """
+    if not _TOOLS_AVAILABLE:
+        raise RuntimeError("RAG tools require qdrant-client and artemis.rag dependencies.")
+    _FILE_TYPE_MAP = {
+        "csv": FileType.CSV,
+        "pdf": FileType.PDF,
+        "docx": FileType.DOCX,
+        "md": FileType.MD,
+        "text": FileType.TEXT,
+        "txt": FileType.TEXT,
+    }
+
+    def ingest_directory(directory_path: str, file_extension: str = default_extension) -> Dict[str, Any]:
+        """Ingest all files in the directory with the given extension into the knowledge base."""
+        dir_path = Path(directory_path)
+        if not dir_path.exists():
+            return {"ok": False, "error": f"Directory not found: {directory_path}", "ingested_count": 0}
+        if not dir_path.is_dir():
+            return {"ok": False, "error": f"Not a directory: {directory_path}", "ingested_count": 0}
+        ext = file_extension.strip().lower().lstrip(".")
+        if ext == "txt":
+            pattern = "*.txt"
+            file_type_key = "text"
+        else:
+            pattern = f"*.{ext}" if ext else "*.md"
+            file_type_key = ext if ext in _FILE_TYPE_MAP else "md"
+        ft = _FILE_TYPE_MAP.get(file_type_key, FileType.MD)
+        files = list(dir_path.rglob(pattern))
+        ingested = 0
+        errors = []
+        for f in files:
+            if not f.is_file():
+                continue
+            try:
+                ingest_file(f, ft, indexer)
+                ingested += 1
+            except Exception as e:
+                errors.append(f"{f.name}: {e}")
+                logger.warning(f"Ingest failed for {f}: {e}")
+        return {
+            "ok": len(errors) == 0 or ingested > 0,
+            "ingested_count": ingested,
+            "failed_count": len(errors),
+            "errors": errors[:10],
+        }
+    return ingest_directory
+
+
 def list_collections_tool() -> List[str]:
     """
     List all Qdrant collection names.
@@ -170,6 +228,7 @@ def delete_collection_tool(
 __all__ = [
     "create_rag_search_tool",
     "create_rag_ingest_tool",
+    "create_rag_ingest_directory_tool",
     "list_collections_tool",
     "get_collection_info_tool",
     "create_collection_tool",

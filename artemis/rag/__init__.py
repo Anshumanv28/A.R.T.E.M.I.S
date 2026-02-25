@@ -100,6 +100,7 @@ try:
     from artemis.rag.tools import (
         create_rag_search_tool,
         create_rag_ingest_tool,
+        create_rag_ingest_directory_tool,
         list_collections_tool,
         get_collection_info_tool,
         create_collection_tool,
@@ -109,6 +110,7 @@ try:
     __all__.extend([
         "create_rag_search_tool",
         "create_rag_ingest_tool",
+        "create_rag_ingest_directory_tool",
         "list_collections_tool",
         "get_collection_info_tool",
         "create_collection_tool",

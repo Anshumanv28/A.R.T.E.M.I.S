@@ -128,13 +128,8 @@ class Indexer:
             logger.exception("Failed to connect to Qdrant", exc_info=True)
             raise
         
-        # Ensure collection exists (needs embedder dimension)
-        try:
-            self._ensure_collection_exists()
-        except Exception as e:
-            logger.exception("Failed to ensure collection exists", exc_info=True)
-            raise
-        
+        # Do not create the collection here. It is created on first add_documents()
+        # so that list_collections can show an empty list when no collections exist.
         logger.debug("Indexer initialization complete")
     
     def _ensure_collection_exists(self) -> None:
@@ -325,6 +320,10 @@ class Indexer:
         if not doc_texts:
             logger.warning("No documents to add after reading from files")
             return
+        
+        # Ensure collection exists before writing (lazy create; avoids creating on
+        # Indexer init so list_collections can show an empty list when appropriate)
+        self._ensure_collection_exists()
         
         logger.info(f"Adding {len(doc_texts)} documents to collection '{self.collection_name}'")
         
