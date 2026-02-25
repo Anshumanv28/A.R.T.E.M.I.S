@@ -26,6 +26,27 @@ except ImportError:
     Indexer = None
     _RETRIEVER_AVAILABLE = False
 
+# Import collection manager (requires qdrant_client - optional)
+try:
+    from artemis.rag.core.collection_manager import (
+        list_collections,
+        get_collection_info,
+        delete_collection,
+        clear_collection,
+        create_collection,
+        get_qdrant_client
+    )
+    _COLLECTION_MANAGER_AVAILABLE = True
+except ImportError:
+    # Collection manager not available if qdrant_client is not installed
+    list_collections = None
+    get_collection_info = None
+    delete_collection = None
+    clear_collection = None
+    create_collection = None
+    get_qdrant_client = None
+    _COLLECTION_MANAGER_AVAILABLE = False
+
 __all__ = []
 
 # Add embedder to exports if available
@@ -35,3 +56,14 @@ if _EMBEDDER_AVAILABLE:
 # Add retriever and indexer to exports if available
 if _RETRIEVER_AVAILABLE:
     __all__.extend(["Retriever", "RetrievalMode", "Indexer", "register_strategy"])
+
+# Add collection manager to exports if available
+if _COLLECTION_MANAGER_AVAILABLE:
+    __all__.extend([
+        "list_collections",
+        "get_collection_info",
+        "delete_collection",
+        "clear_collection",
+        "create_collection",
+        "get_qdrant_client"
+    ])

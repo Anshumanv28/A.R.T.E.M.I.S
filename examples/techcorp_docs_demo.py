@@ -4,6 +4,9 @@ TechCorp Documentation Demo - Ingest and Query
 
 This script ingests all markdown files from techcorp_docs folder
 and then allows you to query them interactively.
+
+Run from project root: python examples/techcorp_docs_demo.py
+Expects RAG_demo/techcorp_docs/ at project root (or set env).
 """
 
 import os
@@ -11,9 +14,10 @@ from pathlib import Path
 from artemis.rag.core import Indexer, Retriever, RetrievalMode
 from artemis.rag.ingestion import ingest_file, FileType
 
-# Get Qdrant config
+# Project root (paths work when run from examples/ or root)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 QDRANT_URL = os.getenv("QDRANT_URL") or input("Qdrant URL: ").strip()
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or Path("ArtemisDB_api_key.txt").read_text().strip()
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or (_PROJECT_ROOT / "ArtemisDB_api_key.txt").read_text().strip()
 
 print("📚 TechCorp Documentation Demo")
 print("=" * 60)
@@ -29,8 +33,8 @@ indexer = Indexer(
 print("   ✅ Connected to Qdrant")
 print()
 
-# Find all markdown files in techcorp_docs
-techcorp_docs_path = Path("RAG_demo/techcorp_docs")
+# Find all markdown files in techcorp_docs (relative to project root)
+techcorp_docs_path = _PROJECT_ROOT / "RAG_demo" / "techcorp_docs"
 md_files = list(techcorp_docs_path.rglob("*.md"))
 
 if not md_files:

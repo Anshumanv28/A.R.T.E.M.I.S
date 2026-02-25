@@ -109,7 +109,7 @@ unzip data/kaggle_datasets/datasets/mohdshahnawazaadil/restaurant-dataset/versio
 - Tests use actual files from `tests/test_data/` if they exist
 - Falls back to temporary files if test files are not found (with warnings)
 - Tests verify file loading functionality, error handling, and format parsing
-- See `tests/WHAT_TO_ADD.md` for details on what files to add
+- See [WHAT_TO_ADD.md](WHAT_TO_ADD.md) for details on what files to add
 
 ### test_embeddings_retrieval.py
 
@@ -135,13 +135,13 @@ unzip data/kaggle_datasets/datasets/mohdshahnawazaadil/restaurant-dataset/versio
 
 - Uses actual test files from `tests/test_data/` if available
 - Falls back to temporary files if test files are not found (with warnings)
-- See `tests/WHAT_TO_ADD.md` for details on what files to add
+- See [WHAT_TO_ADD.md](WHAT_TO_ADD.md) for details on what files to add
 
 **PDF/DOCX Tests:**
 
 - Uses actual test files from `tests/test_data/` if available
 - Tests skip gracefully if files are not found
-- See `tests/WHAT_TO_ADD.md` for details on what files to add
+- See [WHAT_TO_ADD.md](WHAT_TO_ADD.md) for details on what files to add
 
 ## Summary
 
@@ -152,7 +152,7 @@ unzip data/kaggle_datasets/datasets/mohdshahnawazaadil/restaurant-dataset/versio
 | `test_chunkers.py`             | Restaurant dataset (for schema tests) | -                               |
 | `test_ingestion_pipeline.py`   | Restaurant dataset (for CSV tests)    | Test files (see WHAT_TO_ADD.md) |
 | `test_loaders.py`              | Test files (see WHAT_TO_ADD.md)       | -                               |
-| `test_embeddings_retrieval.py` | Restaurant dataset                    | Qdrant instance                 |
+| `test_embeddings_retrieval.py`  | Restaurant dataset                    | Qdrant instance                 |
 | `test_restaurant_converter.py` | Restaurant dataset                    | Qdrant instance                 |
 
 ## Quick Setup
@@ -171,7 +171,7 @@ To run all tests, you need at minimum:
 
 3. **Optional: Test Files** (for loader and ingestion tests)
 
-   - Add files to `tests/test_data/` (see `tests/WHAT_TO_ADD.md`)
+   - Add files to `tests/test_data/` (see [WHAT_TO_ADD.md](WHAT_TO_ADD.md))
    - Text: `tests/test_data/text/sample.txt`
    - Markdown: `tests/test_data/markdown/sample.md`
    - PDF: `tests/test_data/pdf/sample.pdf` (optional)

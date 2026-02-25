@@ -60,7 +60,7 @@ tests/test_data/
 **utf8_sample.txt:**
 
 - Format: UTF-8 text with special characters
-- Content: Emojis (🎉 ✅ ❌), accented characters (é ñ ü), non-Latin scripts (中文, العربية)
+- Content: Emojis, accented characters (é ñ ü), non-Latin scripts
 - Purpose: UTF-8 encoding tests
 
 **long_text.txt:**
@@ -128,7 +128,7 @@ Create simple files with sample content:
 
 ### Option 2: Use Sample Content
 
-Use provided sample content (see `tests/test_data/README.md` for examples)
+Use provided sample content (see [test_data_README.md](test_data_README.md) for examples)
 
 ### Option 3: Download Sample Files
 

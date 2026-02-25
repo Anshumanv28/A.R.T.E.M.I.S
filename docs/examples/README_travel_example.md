@@ -4,7 +4,7 @@ This guide shows you how to use A.R.T.E.M.I.S. document converters, from simple 
 
 ---
 
-## 🎯 Quick Start
+## Quick Start
 
 **For most users - just works with any CSV:**
 
@@ -26,11 +26,11 @@ results = retriever.retrieve("Hotels in Paris under $200", k=5)
 
 ---
 
-## 🔧 Advanced: Custom Schema Converters (Future Extensibility)
+## Advanced: Custom Schema Converters (Future Extensibility)
 
 For advanced users who want optimized conversion for specific data types, you can register custom schema converters. This is optional and only needed if you want specialized formatting.
 
-### 📍 Where to Add Custom Converters
+### Where to Add Custom Converters
 
 ### Option 1: In Your Own Project (Recommended)
 
@@ -121,7 +121,7 @@ A.R.T.E.M.I.S/
 │       │       └── schemas/          # CSV schema converters
 │       │           ├── __init__.py   # Auto-imports schema converters
 │       │           ├── restaurant.py # Restaurant schema converter
-│       │           ├── travel.py      # Travel schema converter ✅ Created
+│       │           ├── travel.py      # Travel schema converter
 │       │           └── support.py    # Support schema converter (future)
 │       └── __init__.py               # Auto-registers converters
 └── examples/                          # Example converters and guides for users
@@ -211,11 +211,11 @@ if __name__ == "__main__":
 
 ---
 
-## 🧳 Travel Booking Example
+## Travel Booking Example
 
 ### Complete Travel Converter Implementation
 
-See `travel_converter_example.py` for a full implementation. Here's what it does:
+See `examples/travel_converter_example.py` for a full implementation. Here's what it does:
 
 ```python
 from artemis.rag import DocumentSchema, register_schema, format_doc
@@ -290,7 +290,7 @@ This format is optimized for semantic search queries like:
 
 ---
 
-## 🔑 Key Points
+## Key Points
 
 ### Simple Usage (Recommended for MVP)
 
@@ -308,7 +308,7 @@ This format is optimized for semantic search queries like:
 
 ---
 
-## 📁 Complete Project Structure Example
+## Complete Project Structure Example
 
 ```
 my-travel-booking-app/
@@ -352,7 +352,7 @@ results = retriever.retrieve("Hotels in Paris under $200", k=5)
 
 ---
 
-## 🛠️ Using the format_doc Helper
+## Using the format_doc Helper
 
 The `format_doc()` helper provides consistent document formatting:
 
@@ -378,7 +378,7 @@ This helper automatically:
 
 ---
 
-## 💡 Benefits
+## Benefits
 
 ### Simple Usage (Auto-Detect)
 

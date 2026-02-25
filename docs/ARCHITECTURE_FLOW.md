@@ -184,7 +184,7 @@ A.R.T.E.M.I.S. follows a clear pipeline: **Load → Chunk → Index → Retrieve
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    INGESTION PHASE                              │
+│                    INGESTION PHASE                               │
 └─────────────────────────────────────────────────────────────────┘
 
 1. User creates Indexer
@@ -199,7 +199,7 @@ A.R.T.E.M.I.S. follows a clear pipeline: **Load → Chunk → Index → Retrieve
    └─ Same embedder, same collection for all files
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                    RETRIEVAL PHASE                              │
+│                    RETRIEVAL PHASE                               │
 └─────────────────────────────────────────────────────────────────┘
 
 4. User creates Retriever

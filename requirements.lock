@@ -7,8 +7,10 @@ annotated-types==0.7.0
 anyio==4.12.0
     # via
     #   -r requirements.txt
+    #   groq
     #   httpx
     #   mcp
+    #   openai
     #   sse-starlette
     #   starlette
 attrs==25.4.0
@@ -29,6 +31,7 @@ cffi==2.0.0
 charset-normalizer==3.4.4
     # via
     #   -r requirements.txt
+    #   pdfminer-six
     #   requests
 click==8.3.1
     # via
@@ -48,11 +51,17 @@ contourpy==1.3.3
 cryptography==46.0.3
     # via
     #   -r requirements.txt
+    #   pdfminer-six
     #   pyjwt
 cycler==0.12.1
     # via
     #   -r requirements.txt
     #   matplotlib
+distro==1.9.0
+    # via
+    #   -r requirements.txt
+    #   groq
+    #   openai
 filelock==3.20.2
     # via
     #   -r requirements.txt
@@ -68,6 +77,8 @@ fsspec==2025.12.0
     #   -r requirements.txt
     #   huggingface-hub
     #   torch
+groq==1.0.0
+    # via -r requirements.txt
 grpcio==1.76.0
     # via
     #   -r requirements.txt
@@ -92,7 +103,11 @@ httpcore==1.0.9
 httpx==0.28.1
     # via
     #   -r requirements.txt
+    #   groq
+    #   langgraph-sdk
+    #   langsmith
     #   mcp
+    #   openai
     #   qdrant-client
 httpx-sse==0.4.3
     # via
@@ -122,11 +137,23 @@ jinja2==3.1.6
     # via
     #   -r requirements.txt
     #   torch
+jiter==0.12.0
+    # via
+    #   -r requirements.txt
+    #   openai
 joblib==1.5.3
     # via
     #   -r requirements.txt
     #   nltk
     #   scikit-learn
+jsonpatch==1.33
+    # via
+    #   -r requirements.txt
+    #   langchain-core
+jsonpointer==3.0.0
+    # via
+    #   -r requirements.txt
+    #   jsonpatch
 jsonschema==4.25.1
     # via
     #   -r requirements.txt
@@ -141,6 +168,31 @@ kiwisolver==1.4.9
     # via
     #   -r requirements.txt
     #   matplotlib
+langchain-core==1.2.7
+    # via
+    #   -r requirements.txt
+    #   langgraph
+    #   langgraph-checkpoint
+    #   langgraph-prebuilt
+langgraph==1.0.7
+    # via -r requirements.txt
+langgraph-checkpoint==4.0.0
+    # via
+    #   -r requirements.txt
+    #   langgraph
+    #   langgraph-prebuilt
+langgraph-prebuilt==1.0.7
+    # via
+    #   -r requirements.txt
+    #   langgraph
+langgraph-sdk==0.3.3
+    # via
+    #   -r requirements.txt
+    #   langgraph
+langsmith==0.6.6
+    # via
+    #   -r requirements.txt
+    #   langchain-core
 markupsafe==3.0.3
     # via
     #   -r requirements.txt
@@ -171,20 +223,40 @@ numpy==2.4.0
     #   scipy
     #   torchvision
     #   transformers
+openai==2.16.0
+    # via -r requirements.txt
+orjson==3.11.5
+    # via
+    #   -r requirements.txt
+    #   langgraph-sdk
+    #   langsmith
+ormsgpack==1.12.2
+    # via
+    #   -r requirements.txt
+    #   langgraph-checkpoint
 packaging==25.0
     # via
     #   -r requirements.txt
     #   huggingface-hub
     #   kagglehub
+    #   langchain-core
+    #   langsmith
     #   matplotlib
     #   pytest
     #   transformers
 pandas==2.3.3
     # via -r requirements.txt
+pdfminer-six==20251230
+    # via
+    #   -r requirements.txt
+    #   pdfplumber
+pdfplumber==0.11.9
+    # via -r requirements.txt
 pillow==12.1.0
     # via
     #   -r requirements.txt
     #   matplotlib
+    #   pdfplumber
     #   torchvision
 pip==25.3
     # via -r requirements.txt
@@ -207,7 +279,12 @@ pycparser==2.23
 pydantic==2.12.5
     # via
     #   -r requirements.txt
+    #   groq
+    #   langchain-core
+    #   langgraph
+    #   langsmith
     #   mcp
+    #   openai
     #   pydantic-settings
     #   qdrant-client
 pydantic-core==2.41.5
@@ -230,6 +307,10 @@ pyparsing==3.0.9
     # via
     #   -r requirements.txt
     #   matplotlib
+pypdfium2==5.3.0
+    # via
+    #   -r requirements.txt
+    #   pdfplumber
 pytest==9.0.2
     # via -r requirements.txt
 python-dateutil==2.9.0.post0
@@ -259,6 +340,7 @@ pyyaml==6.0.3
     #   -r requirements.txt
     #   huggingface-hub
     #   kagglehub
+    #   langchain-core
     #   transformers
 qdrant-client==1.16.2
     # via -r requirements.txt
@@ -279,7 +361,13 @@ requests==2.32.5
     #   -r requirements.txt
     #   huggingface-hub
     #   kagglehub
+    #   langsmith
+    #   requests-toolbelt
     #   transformers
+requests-toolbelt==1.0.0
+    # via
+    #   -r requirements.txt
+    #   langsmith
 rpds-py==0.30.0
     # via
     #   -r requirements.txt
@@ -310,6 +398,11 @@ six==1.17.0
     # via
     #   -r requirements.txt
     #   python-dateutil
+sniffio==1.3.1
+    # via
+    #   -r requirements.txt
+    #   groq
+    #   openai
 sse-starlette==3.1.2
     # via
     #   -r requirements.txt
@@ -323,6 +416,10 @@ sympy==1.14.0
     # via
     #   -r requirements.txt
     #   torch
+tenacity==9.1.2
+    # via
+    #   -r requirements.txt
+    #   langchain-core
 threadpoolctl==3.6.0
     # via
     #   -r requirements.txt
@@ -344,6 +441,7 @@ tqdm==4.67.1
     #   huggingface-hub
     #   kagglehub
     #   nltk
+    #   openai
     #   sentence-transformers
     #   transformers
 transformers==4.57.3
@@ -354,9 +452,12 @@ typing-extensions==4.15.0
     # via
     #   -r requirements.txt
     #   anyio
+    #   groq
     #   grpcio
     #   huggingface-hub
+    #   langchain-core
     #   mcp
+    #   openai
     #   pydantic
     #   pydantic-core
     #   referencing
@@ -379,9 +480,22 @@ urllib3==2.6.2
     #   -r requirements.txt
     #   qdrant-client
     #   requests
+uuid-utils==0.14.0
+    # via
+    #   -r requirements.txt
+    #   langchain-core
+    #   langsmith
 uv==0.9.21
     # via -r requirements.txt
 uvicorn==0.40.0
     # via
     #   -r requirements.txt
     #   mcp
+xxhash==3.6.0
+    # via
+    #   -r requirements.txt
+    #   langgraph
+zstandard==0.25.0
+    # via
+    #   -r requirements.txt
+    #   langsmith

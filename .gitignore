@@ -162,14 +162,15 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
-ROADMAP.md
+# ROADMAP.md lives in docs/ (tracked)
 refactor_plan.md
 dev_help.txt
 dataset/
 artemis_data/ 
 # Centralized data folder (logs, generated docs, etc.)
 RAG_demo/
-docs/
+# docs/ is used for project documentation (tracked)
+docs/_build/
 # Generated documents (deleted after ingestion)
 
 # Qdrant

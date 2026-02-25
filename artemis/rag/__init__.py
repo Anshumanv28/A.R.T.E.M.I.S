@@ -94,3 +94,26 @@ if _INGESTION_AVAILABLE:
 # Add retriever and indexer to exports if available
 if _RETRIEVER_AVAILABLE:
     __all__.extend(["Retriever", "RetrievalMode", "Indexer", "register_strategy"])
+
+# Import RAG tools (for agent tool-calling)
+try:
+    from artemis.rag.tools import (
+        create_rag_search_tool,
+        create_rag_ingest_tool,
+        list_collections_tool,
+        get_collection_info_tool,
+        create_collection_tool,
+        clear_collection_tool,
+        delete_collection_tool,
+    )
+    __all__.extend([
+        "create_rag_search_tool",
+        "create_rag_ingest_tool",
+        "list_collections_tool",
+        "get_collection_info_tool",
+        "create_collection_tool",
+        "clear_collection_tool",
+        "delete_collection_tool",
+    ])
+except ImportError:
+    pass

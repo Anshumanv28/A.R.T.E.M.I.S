@@ -4,15 +4,18 @@ Demo script to test queries on ingested restaurant data.
 
 This script demonstrates how to query the A.R.T.E.M.I.S. RAG system
 with custom queries and retrieve relevant restaurant information.
+
+Run from project root: python examples/query_demo.py
 """
 
 import os
 from pathlib import Path
 from artemis.rag.core import Indexer, Retriever, RetrievalMode
 
-# Get Qdrant config
+# Project root (so API key path works when run from examples/)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 QDRANT_URL = os.getenv("QDRANT_URL") or input("Qdrant URL: ").strip()
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or Path("ArtemisDB_api_key.txt").read_text().strip()
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or (_PROJECT_ROOT / "ArtemisDB_api_key.txt").read_text().strip()
 
 print("🔍 A.R.T.E.M.I.S. Query Demo")
 print("=" * 60)

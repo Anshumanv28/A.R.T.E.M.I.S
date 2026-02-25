@@ -63,10 +63,9 @@ A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** desi
 - ✅ **Chunking Strategies** - CSV_ROW, FIXED, FIXED_OVERLAP, SEMANTIC
 - ✅ **Semantic Search** - Vector-based retrieval with Qdrant
 - ✅ **Extensible Architecture** - Registry pattern for custom components
+- ✅ **LangGraph Agent** - Intelligent routing between RAG and direct answers ([Quick Start](docs/AGENT_QUICKSTART.md))
 
 ### Coming Soon (Phase 2-3)
-
-- 🔜 **Agent Orchestration** - LangGraph multi-step planning
 - 🔜 **Multimodal Inputs** - Text, voice (LiveKit), vision
 - 🔜 **Dynamic Tool Registry** - Documentation-driven tool registration
 - 🔜 **Advanced Vector Memory** - Long-term context management
@@ -298,6 +297,40 @@ for r in results:
     print(f"{r['score']:.3f}: {r['text'][:100]}...")
 ```
 
+### Step 5: Use the LangGraph Agent (Optional)
+
+The agent layer provides intelligent routing between RAG and direct answers:
+
+```bash
+# Interactive mode
+python -m artemis.agent.run
+
+# Single query
+python -m artemis.agent.run "What is the main topic?"
+```
+
+Or programmatically:
+
+```python
+from artemis.agent import run_agent
+from artemis.rag.core.indexer import Indexer
+
+# Create indexer (assumes documents already indexed)
+indexer = Indexer(collection_name="my_documents")
+
+# Run agent
+result = run_agent(
+    query="What does the document say about X?",
+    indexer=indexer
+)
+
+print(result["final_answer"])
+print(f"Intent: {result['intent']}")  # "rag" or "direct"
+print(f"Confidence: {result['confidence']:.2f}")
+```
+
+See [Agent Quick Start Guide](docs/AGENT_QUICKSTART.md) for detailed usage.
+
 ---
 
 ## 📋 What's Available
@@ -361,15 +394,15 @@ print("Available strategies:", list(RETRIEVAL_STRATEGIES.keys()))
 
 ### Technical Documentation
 
-- **[Architecture Flow](ARCHITECTURE_FLOW.md)** - System architecture and data flow
+- **[Architecture Flow](docs/ARCHITECTURE_FLOW.md)** - System architecture and data flow
 - **[Hybrid Search Implementation](docs/HYBRID_SEARCH_IMPLEMENTATION.md)** - Hybrid search details
 - **[Metadata Filtering](docs/METADATA_FILTERING.md)** - Metadata filtering guide
-- **[Roadmap](ROADMAP.md)** - Project roadmap and milestones
+- **[Roadmap](docs/ROADMAP.md)** - Project roadmap and milestones
 
 ### Examples & Templates
 
-- **[Travel Converter Example](examples/README_travel_example.md)** - CSV schema converter guide
-- **[Template Files](examples/templates/README.md)** - Boilerplate code for custom components
+- **[Travel Converter Example](docs/examples/README_travel_example.md)** - CSV schema converter guide
+- **[Template Files](docs/examples/templates_README.md)** - Boilerplate code for custom components
 - **[Travel Converter Script](examples/travel_converter_example.py)** - Working example
 
 ### Documentation Index
@@ -418,7 +451,7 @@ See [docs/README.md](docs/README.md) for a complete documentation index.
   - Import paths
   - Common code snippets
 
-- **[Template Files](examples/templates/)** - Ready-to-use boilerplate:
+- **[Template Files](docs/examples/templates_README.md)** - Ready-to-use boilerplate:
   - `template_csv_schema.py` - CSV schema converter template
   - `template_chunker.py` - Chunking strategy template
   - `template_retrieval_strategy.py` - Retrieval strategy template
@@ -532,7 +565,8 @@ ingest_file("document.pdf", FileType.PDF, indexer,
 
 For more examples, see:
 
-- [Travel Converter Example](examples/README_travel_example.md)
+- [Travel Converter Example](docs/examples/README_travel_example.md)
+- [Agent Demo](examples/agent_demo.py) - LangGraph agent with RAG/direct routing
 - [Template Files](examples/templates/)
 - [test_queries.py](test_queries.py) - Interactive demo script
 
@@ -544,32 +578,32 @@ A.R.T.E.M.I.S. follows a modular architecture with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   A.R.T.E.M.I.S. Agent                   │
+│                   A.R.T.E.M.I.S. Agent                  │
 ├─────────────────────────────────────────────────────────┤
-│                                                           │
+│                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
 │  │   Multimodal │  │  RAG Engine  │  │   Tool       │   │
 │  │   Inputs     │→ │  (DSPy)      │→ │   Registry   │   │
 │  │              │  │              │  │              │   │
 │  └──────────────┘  └──────────────┘  └──────────────┘   │
-│         │                 │                   │          │
-│         │                 │         ┌─────────▼──────┐   │
-│         │                 │         │ Documentation  │   │
-│         │                 │         │ Watcher        │   │
+│         │                 │                   │         │
+│         │                 │         ┌─────────▼──────┐  │
+│         │                 │         │ Documentation  │  │
+│         │                 │         │ Watcher        │  │
 │         │                 │         │ (YAML/OpenAPI)│   │
-│         │                 │         └────────────────┘   │
-│         └─────────────────┼───────────────────┘          │
-│                           │                               │
-│                  ┌────────▼────────┐                      │
-│                  │  LangGraph      │                      │
-│                  │  Orchestrator   │                      │
-│                  └────────┬────────┘                      │
-│                           │                               │
-│                  ┌────────▼────────┐                      │
-│                  │  Qdrant Memory │                      │
-│                  │  (Semantic)     │                      │
-│                  └─────────────────┘                      │
-│                                                           │
+│         │                 │         └────────────────┘  │
+│         └─────────────────┼───────────────────┘         │
+│                           │                             │
+│                  ┌────────▼────────┐                    │
+│                  │  LangGraph      │                    │
+│                  │  Orchestrator   │                    │
+│                  └────────┬────────┘                    │
+│                           │                             │
+│                  ┌────────▼────────┐                    │
+│                  │  Qdrant Memory │                     │
+│                  │  (Semantic)     │                    │
+│                  └─────────────────┘                    │
+│                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -584,7 +618,7 @@ A.R.T.E.M.I.S. follows a modular architecture with clear separation of concerns:
 
 A.R.T.E.M.I.S. follows a clear pipeline: **Load → Chunk → Index → Retrieve**
 
-For detailed architecture information, see [ARCHITECTURE_FLOW.md](ARCHITECTURE_FLOW.md).
+For detailed architecture information, see [ARCHITECTURE_FLOW.md](docs/ARCHITECTURE_FLOW.md).
 
 ### Tech Stack
 
@@ -609,10 +643,7 @@ For detailed architecture information, see [ARCHITECTURE_FLOW.md](ARCHITECTURE_F
 - ✅ Multiple chunking strategies
 - ✅ Semantic search
 - ✅ Extensible architecture with registry pattern
-
-**In Progress:**
-
-- 🔄 Agent orchestration
+- ✅ LangGraph agent orchestration (RAG vs direct routing)
 - 🔄 Multimodal inputs
 - 🔄 Advanced memory management
 
@@ -622,7 +653,7 @@ For detailed architecture information, see [ARCHITECTURE_FLOW.md](ARCHITECTURE_F
 - 📅 Frontend dashboard
 - 📅 Custom LLM fine-tuning
 
-See [ROADMAP.md](./ROADMAP.md) for detailed progress and milestones.
+See [ROADMAP.md](docs/ROADMAP.md) for detailed progress and milestones.
 
 ---
 
@@ -702,7 +733,7 @@ We'd love to hear from you! Here are the best ways to reach us:
 - **Documentation**: [docs/](docs/)
 - **Examples**: [examples/](examples/)
 - **Templates**: [examples/templates/](examples/templates/)
-- **Roadmap**: [ROADMAP.md](ROADMAP.md)
+- **Roadmap**: [ROADMAP.md](docs/ROADMAP.md)
 
 ---
 

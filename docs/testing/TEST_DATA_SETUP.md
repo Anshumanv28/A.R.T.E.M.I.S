@@ -62,7 +62,7 @@ Use actual documents from your projects (make sure they're small and don't conta
 
 ### Option 3: Generate Programmatically
 
-See `README.md` in this directory for code examples to generate files.
+See [test_data_README.md](test_data_README.md) in this directory for code examples to generate files.
 
 ## File Naming Convention
 
