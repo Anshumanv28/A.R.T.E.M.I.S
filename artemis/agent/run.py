@@ -6,7 +6,9 @@ import sys
 from typing import Optional
 
 from artemis.agent.config import AgentConfig
+from artemis.agent.context import load_system_context
 from artemis.agent.graph import AgentGraph
+from artemis.agent.supervisor import Supervisor
 from artemis.agent.tools import ToolRegistry, build_rag_registry
 from artemis.rag.core.retriever import Retriever, RetrievalMode, RETRIEVAL_STRATEGIES
 from artemis.rag.core.indexer import Indexer
@@ -176,6 +178,141 @@ def run_agent(
     return dict(result)
 
 
+def run_agent_v2(
+    query: str,
+    config: Optional[AgentConfig] = None,
+    registry: Optional[ToolRegistry] = None,
+    indexer=None,
+    retriever=None,
+    collection_name: str = "artemis_documents",
+) -> dict:
+    """
+    Run the agent using the Supervisor + sub-agent architecture.
+    Builds config and registry the same way as run_agent() when not provided.
+    Loads system context from the registry, creates a Supervisor, and dispatches the query.
+    Returns the final agent state as a dict (same shape as run_agent).
+    """
+    if config is None:
+        try:
+            config = AgentConfig.from_env()
+        except ValueError as e:
+            logger.error(f"Configuration error: {e}")
+            raise
+
+    SYSTEM_DOCS_COLLECTION = "artemis_system_docs"
+    USER_COLLECTION = "artemis_user_docs"
+
+    if registry is None:
+        if retriever is None and indexer is None:
+            # Multi-collection: agent can switch between system docs and user data by task
+            logger.info("Building multi-collection setup (artemis_system_docs + artemis_user_docs)")
+            from artemis.rag.core.embedder import Embedder
+            embedder = Embedder()
+            idx_system = Indexer(collection_name=SYSTEM_DOCS_COLLECTION, embedder=embedder)
+            idx_user = Indexer(collection_name=USER_COLLECTION, embedder=embedder)
+            indexers = {SYSTEM_DOCS_COLLECTION: idx_system, USER_COLLECTION: idx_user}
+            bm25_available = False
+            try:
+                from artemis.rag.strategies.keyword import BM25_AVAILABLE
+                bm25_available = BM25_AVAILABLE
+            except (ImportError, Exception):
+                pass
+            retrievers_by_collection = {}
+            for col_name, idx in indexers.items():
+                retrievers_by_collection[col_name] = {}
+                for mode in RETRIEVAL_STRATEGIES:
+                    if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not bm25_available:
+                        continue
+                    try:
+                        r = Retriever(mode=mode, indexer=idx)
+                        retrievers_by_collection[col_name][mode.value] = r
+                    except Exception as e:
+                        logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
+                if "semantic" not in retrievers_by_collection[col_name]:
+                    retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
+            llm_client_for_agentic = None
+            try:
+                if config.provider == "groq" and getattr(config, "groq_api_key", None):
+                    from artemis.agent.llm.groq_client import GroqClient
+                    llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+                elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+                    from artemis.agent.llm.openai_client import OpenAIClient
+                    llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+            except Exception as e:
+                logger.debug("Could not create LLM client for agentic chunking: %s", e)
+            registry = build_rag_registry(
+                retriever=None,
+                indexer=None,
+                default_k=config.retrieval_k,
+                retrievers=None,
+                llm_client_for_agentic=llm_client_for_agentic,
+                indexers=indexers,
+                retrievers_by_collection=retrievers_by_collection,
+                default_collection=USER_COLLECTION,
+            )
+        else:
+            # Single-collection path (do not copy current_collection — only for AgentGraph)
+            if retriever is None:
+                if indexer is not None:
+                    logger.info("Creating retriever from indexer")
+                    retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+                else:
+                    logger.info("Creating indexer and retriever (requires env vars)")
+                    indexer = Indexer(collection_name=collection_name)
+                    retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+            elif indexer is None:
+                indexer = getattr(retriever, "indexer", None)
+            idx = indexer or getattr(retriever, "indexer", None)
+            retrievers = {}
+            bm25_available = False
+            try:
+                from artemis.rag.strategies.keyword import BM25_AVAILABLE
+                bm25_available = BM25_AVAILABLE
+            except (ImportError, Exception):
+                pass
+            for mode in RETRIEVAL_STRATEGIES:
+                if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and (not bm25_available or idx is None):
+                    continue
+                try:
+                    if mode == RetrievalMode.SEMANTIC and idx is None:
+                        r = retriever
+                    else:
+                        if idx is None:
+                            continue
+                        r = Retriever(mode=mode, indexer=idx)
+                    retrievers[mode.value] = r
+                except Exception as e:
+                    logger.debug("Skipping retrieval mode %s: %s", mode.value, e)
+            if "semantic" not in retrievers:
+                retrievers["semantic"] = retriever
+            llm_client_for_agentic = None
+            try:
+                if config.provider == "groq" and getattr(config, "groq_api_key", None):
+                    from artemis.agent.llm.groq_client import GroqClient
+                    llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+                elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+                    from artemis.agent.llm.openai_client import OpenAIClient
+                    llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+            except Exception as e:
+                logger.debug("Could not create LLM client for agentic chunking: %s", e)
+            registry = build_rag_registry(
+                retriever,
+                indexer=indexer,
+                default_k=config.retrieval_k,
+                retrievers=retrievers,
+                llm_client_for_agentic=llm_client_for_agentic,
+            )
+
+    system_context = load_system_context(registry)
+    supervisor = Supervisor(
+        config=config,
+        registry=registry,
+        system_context=system_context,
+    )
+    result = supervisor.invoke(query)
+    return dict(result)
+
+
 def main():
     """Interactive CLI entrypoint."""
     import argparse
@@ -195,6 +332,11 @@ def main():
         "--single-collection",
         action="store_true",
         help="Use a single collection for all ingest and search (legacy). Default is multi-collection (artemis_system_docs + artemis_user_docs); agent chooses by task.",
+    )
+    parser.add_argument(
+        "--v2",
+        action="store_true",
+        help="Use Supervisor architecture (v2) instead of legacy AgentGraph (v1).",
     )
     parser.add_argument(
         "--provider",
@@ -242,7 +384,9 @@ def main():
         print("=" * 70)
         print(f"Provider: {config.provider}")
         print(f"Model: {config.model_name}")
-        if retriever is None:
+        if args.v2:
+            print("Mode: Supervisor v2 (multi-agent routing)")
+        elif retriever is None:
             print("Mode: multi-collection (artemis_system_docs + artemis_user_docs); agent chooses by task. Use --single-collection to pin to one collection.")
         else:
             print(f"Mode: single collection (all ingest and search): {args.collection}")
@@ -257,7 +401,10 @@ def main():
                 if not query:
                     continue
 
-                result = run_agent(query, retriever=retriever, indexer=indexer, config=config)
+                if args.v2:
+                    result = run_agent_v2(query, retriever=retriever, indexer=indexer, config=config)
+                else:
+                    result = run_agent(query, retriever=retriever, indexer=indexer, config=config)
 
                 print("\n" + "-" * 70)
                 print("Answer:")
@@ -269,6 +416,8 @@ def main():
                     print(f"\nUsed {len(tool_calls)} tool call(s)")
                 print(f"Intent: {result.get('intent', 'unknown')}")
                 print(f"Confidence: {result.get('confidence', 0.0):.2f}")
+                if args.v2:
+                    print(f"Routed to: {result.get('routed_to', 'unknown')}")
 
                 if result.get("error"):
                     print(f"\nError: {result['error']}")
@@ -284,13 +433,18 @@ def main():
 
     else:
         try:
-            result = run_agent(
-                args.query,
-                retriever=retriever,
-                indexer=indexer,
-                config=config,
-            )
+            if args.v2:
+                result = run_agent_v2(args.query, retriever=retriever, indexer=indexer, config=config)
+            else:
+                result = run_agent(
+                    args.query,
+                    retriever=retriever,
+                    indexer=indexer,
+                    config=config,
+                )
             print(result.get("final_answer", "No answer generated"))
+            if args.v2:
+                print(f"Routed to: {result.get('routed_to', 'unknown')}")
 
             if result.get("error"):
                 print(f"\nError: {result['error']}", file=sys.stderr)
