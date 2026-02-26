@@ -8,9 +8,8 @@ Tests the entire A.R.T.E.M.I.S system with:
 
 Validates:
 - RAG retrieval from both collections
-- Agent intent classification
-- Agent RAG node (document retrieval + synthesis)
-- Agent direct answer node
+- Agent intent classification (tool vs direct)
+- Agent tool node (search_documents, ingest, etc.) and direct-answer node
 - End-to-end agent flow
 - Collection isolation (no cross-contamination)
 """

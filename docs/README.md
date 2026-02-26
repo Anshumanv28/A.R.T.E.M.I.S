@@ -5,8 +5,11 @@ Documentation index for the A.R.T.E.M.I.S. project.
 ## Project documentation
 
 - **[Architecture Flow](ARCHITECTURE_FLOW.md)** – System architecture and data flow
-- **[Agent architecture](AGENT_ARCHITECTURE.md)** – ReAct-style planner–executor, tool registry, and RAG as a tool
-- **[RAG usage](RAG_USAGE.md)** – How to use the RAG system standalone and with the agent, including all RAG tools
+- **[Agent architecture](AGENT_ARCHITECTURE.md)** – ReAct-style planner–executor, tool registry, no dedicated RAG node (RAG via tools)
+- **[Agent quick start](AGENT_QUICKSTART.md)** – Run the agent, multi-collection default, CLI, state shape
+- **[Agent test prompts](AGENT_TEST_PROMPTS.md)** – Example prompts and queries to test retrieval after ingesting docs
+- **[RAG usage](RAG_USAGE.md)** – RAG standalone and with the agent (search, ingest, suggest_ingest_options, multi-collection)
+- **[RAG customization](RAG_CUSTOMIZATION.md)** – RAG parameters, chunk/retrieval options, and **adding new strategies** (automatic registry-driven vs manual override)
 - **[Roadmap](ROADMAP.md)** – Project roadmap and milestones (if present)
 
 ## Examples

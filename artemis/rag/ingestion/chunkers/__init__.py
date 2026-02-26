@@ -29,7 +29,7 @@ try:
 except ImportError:
     pass
 
-# Agentic chunker
+# Agentic chunker (LLM-driven when llm_client provided; else fallback to fixed_overlap)
 try:
     from artemis.rag.ingestion.chunkers.agentic_chunker import agentic_chunker  # noqa: F401
 except ImportError:

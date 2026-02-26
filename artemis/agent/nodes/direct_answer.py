@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 from artemis.agent.state import AgentState
 from artemis.agent.config import AgentConfig
+from artemis.agent.prompts import load_direct_answer_prompt
 from artemis.agent.llm.groq_client import GroqClient
 from artemis.agent.llm.openai_client import OpenAIClient
 from artemis.utils import get_logger
@@ -121,22 +122,14 @@ def direct_answer_node(state: AgentState, config: AgentConfig) -> AgentState:
 
     tool_context = _build_tool_context(state)
     if tool_context:
-        system_prompt = """You are a helpful AI assistant. Answer questions clearly and concisely.
-
-Use the context from tool results below to answer the user's query. Cite sources with [1], [2] when referring to retrieved documents.
-If the context doesn't contain enough information, say so. Be accurate and friendly.
-
-When a tool reports that a collection "does not exist", say the collection is missing or not found—do not say it was deleted unless the user explicitly asked to delete a collection and the delete_collection tool was run."""
+        system_prompt = load_direct_answer_prompt(with_context=True)
         user_prompt = f"""Query: {query}
 
 {tool_context}
 
 Provide a comprehensive answer to the query based on the context above."""
     else:
-        system_prompt = """You are a helpful AI assistant. Answer questions clearly and concisely.
-
-If you don't know something or need more context, say so honestly.
-Be helpful, accurate, and friendly."""
+        system_prompt = load_direct_answer_prompt(with_context=False)
         user_prompt = query
 
     try:

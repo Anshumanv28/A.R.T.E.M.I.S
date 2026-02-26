@@ -60,10 +60,10 @@ A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** desi
 - ✅ **Adaptive RAG** - DSPy-optimized retrieval (90%+ recall)
 - ✅ **File Ingestion** - Support for CSV, PDF, DOCX, Markdown, and Text files
 - ✅ **CSV Schema Converters** - RESTAURANT and TRAVEL schemas
-- ✅ **Chunking Strategies** - CSV_ROW, FIXED, FIXED_OVERLAP, SEMANTIC
+- ✅ **Chunking Strategies** - CSV_ROW, FIXED, FIXED_OVERLAP, SEMANTIC, AGENTIC (LLM-driven)
 - ✅ **Semantic Search** - Vector-based retrieval with Qdrant
 - ✅ **Extensible Architecture** - Registry pattern for custom components
-- ✅ **LangGraph Agent** - Intelligent routing between RAG and direct answers ([Quick Start](docs/AGENT_QUICKSTART.md))
+- ✅ **LangGraph Agent** - Planner–tool loop: RAG via tools (search, ingest, suggest options), multi-collection by default ([Quick Start](docs/AGENT_QUICKSTART.md))
 
 ### Coming Soon (Phase 2-3)
 - 🔜 **Multimodal Inputs** - Text, voice (LiveKit), vision
@@ -90,11 +90,11 @@ pip install -r requirements.txt
 export QDRANT_URL="your-qdrant-url"
 export QDRANT_API_KEY="your-api-key"
 
-# 3. Run the demo
-python test_queries.py
+# 3. Run the agent (default: multi-collection)
+python -m artemis.agent.run
 ```
 
-For detailed setup, see [Getting Started](#-getting-started) or [Quick Start Guide](docs/QUICK_START.md).
+For detailed setup, see [Getting Started](#-getting-started). For the agent, see [Agent Quick Start](docs/AGENT_QUICKSTART.md).
 
 ---
 
@@ -164,7 +164,7 @@ export QDRANT_API_KEY="your-api-key"
    # Then use: QDRANT_URL="http://localhost:6333"
    ```
 
-For detailed setup instructions, see [Setup Guide](docs/SETUP_GUIDE.md).
+For detailed setup instructions, see [Getting Started](#-getting-started) above and [docs/README.md](docs/README.md).
 
 ---
 
@@ -227,50 +227,28 @@ for result in results:
     print()
 ```
 
-### Step 4: Run the Demo
+### Step 4: Run the Agent
 
 ```bash
-# Run the interactive query demo
-python test_queries.py
+# Interactive mode (default: multi-collection)
+python -m artemis.agent.run
+
+# Single query
+python -m artemis.agent.run "What is the main topic?"
 ```
 
-**What the demo does:**
+**What the agent does:**
 
-- ✅ Connects to your Qdrant instance
-- ✅ Runs 6 example queries automatically
-- ✅ Shows results with scores and metadata
-- ✅ Enters interactive mode for custom queries
+- ✅ Uses two collections by default: `artemis_system_docs` (system/docs) and `artemis_user_docs` (user data)
+- ✅ Routes between tool use (search, ingest) and direct answer via a planner
+- ✅ Accepts custom queries in interactive mode
 
 **Requirements:**
 
 - Qdrant instance running (cloud or local)
-- Data already ingested (use `ingest_file()` first)
-- Environment variables set (QDRANT_URL, QDRANT_API_KEY)
+- Environment variables set (QDRANT_URL, QDRANT_API_KEY). Optional: GROQ_API_KEY or OPENAI API key for the LLM.
 
-**Example Output:**
-
-```
-🔍 A.R.T.E.M.I.S. Query Demo
-============================================================
-
-1. Connecting to Qdrant...
-   ✅ Connected to Qdrant
-
-2. Creating Retriever...
-   ✅ Retriever ready
-
-============================================================
-📝 Example Queries
-============================================================
-
-1. Query: "Italian restaurants in Mumbai"
-------------------------------------------------------------
-   Result 1 (Score: 0.9234):
-   Restaurant: Trattoria. Location: Mumbai, Maharashtra...
-   City: Mumbai
-   Rating: 4.5
-   ...
-```
+See [Agent Quick Start](docs/AGENT_QUICKSTART.md) and [Agent test prompts](docs/AGENT_TEST_PROMPTS.md) for example queries and retrieval tests.
 
 ### Complete Example Script
 
@@ -299,37 +277,33 @@ for r in results:
 
 ### Step 5: Use the LangGraph Agent (Optional)
 
-The agent layer provides intelligent routing between RAG and direct answers:
+The agent uses a planner–tool loop: RAG is invoked via tools (e.g. `search_documents`, `ingest_file`), and the planner chooses between calling a tool or answering directly. Default is **multi-collection** (`artemis_system_docs` + `artemis_user_docs`).
 
-```bash
-# Interactive mode
-python -m artemis.agent.run
-
-# Single query
-python -m artemis.agent.run "What is the main topic?"
-```
-
-Or programmatically:
+**Default (multi-collection):**
 
 ```python
 from artemis.agent import run_agent
-from artemis.rag.core.indexer import Indexer
 
-# Create indexer (assumes documents already indexed)
-indexer = Indexer(collection_name="my_documents")
-
-# Run agent
-result = run_agent(
-    query="What does the document say about X?",
-    indexer=indexer
-)
-
+# No indexer/retriever: agent uses artemis_system_docs and artemis_user_docs
+result = run_agent("What does the document say about X?")
 print(result["final_answer"])
-print(f"Intent: {result['intent']}")  # "rag" or "direct"
-print(f"Confidence: {result['confidence']:.2f}")
+print(f"Intent: {result.get('intent', 'unknown')}")   # "tool" or "direct"
+print(f"Confidence: {result.get('confidence', 0):.2f}")
 ```
 
-See [Agent Quick Start Guide](docs/AGENT_QUICKSTART.md) for detailed usage.
+**Single-collection (optional):**
+
+```python
+from artemis.agent import run_agent
+from artemis.rag.core import Indexer, Retriever, RetrievalMode
+
+indexer = Indexer(collection_name="my_documents")
+retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+result = run_agent("What does the document say about X?", retriever=retriever, indexer=indexer)
+print(result["final_answer"])
+```
+
+See [Agent Quick Start](docs/AGENT_QUICKSTART.md) for detailed usage.
 
 ---
 
@@ -357,7 +331,7 @@ Before extending A.R.T.E.M.I.S., here's what you get out of the box:
 - ✅ **FIXED** - Fixed-size chunks without overlap
 - ✅ **FIXED_OVERLAP** - Fixed-size chunks with overlap (default for PDF/DOCX/TEXT)
 - ✅ **SEMANTIC** - Sentence/paragraph-aware chunking (default for Markdown)
-- ⚠️ **AGENTIC** - LLM-driven chunking (placeholder, falls back to FIXED_OVERLAP)
+- ✅ **AGENTIC** - LLM-driven semantic chunking (when `llm_client` provided; else falls back to FIXED_OVERLAP)
 
 ### Retrieval Strategies
 
@@ -387,17 +361,16 @@ print("Available strategies:", list(RETRIEVAL_STRATEGIES.keys()))
 
 ### Core Documentation
 
-- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in 5 minutes
-- **[Setup Guide](docs/SETUP_GUIDE.md)** - Detailed setup instructions
-- **[Extending A.R.T.E.M.I.S.](docs/EXTENDING_ARTEMIS.md)** - Complete developer guide for custom components
-- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Cheat sheet for extending the system
+- **[Agent Quick Start](docs/AGENT_QUICKSTART.md)** - Run the agent (multi-collection default, CLI, state)
+- **[Agent test prompts](docs/AGENT_TEST_PROMPTS.md)** - Example prompts and retrieval tests
+- **[RAG usage](docs/RAG_USAGE.md)** - Standalone RAG and agent RAG tools (search, ingest, multi-collection)
+- **[Documentation index](docs/README.md)** - Full list of docs
 
 ### Technical Documentation
 
-- **[Architecture Flow](docs/ARCHITECTURE_FLOW.md)** - System architecture and data flow
-- **[Hybrid Search Implementation](docs/HYBRID_SEARCH_IMPLEMENTATION.md)** - Hybrid search details
-- **[Metadata Filtering](docs/METADATA_FILTERING.md)** - Metadata filtering guide
-- **[Roadmap](docs/ROADMAP.md)** - Project roadmap and milestones
+- **[Architecture Flow](docs/ARCHITECTURE_FLOW.md)** - RAG pipeline: load, chunk, index, retrieve
+- **[Agent architecture](docs/AGENT_ARCHITECTURE.md)** - Planner–tool loop, registry, no dedicated RAG node
+- **[RAG customization](docs/RAG_CUSTOMIZATION.md)** - Chunk/retrieval options and adding strategies
 
 ### Examples & Templates
 
@@ -430,26 +403,12 @@ See [docs/README.md](docs/README.md) for a complete documentation index.
 ### Getting Started with Extensions
 
 1. **Check what's available** - See [What's Available](#-whats-available) section
-2. **Review documentation** - Read [Extending A.R.T.E.M.I.S.](docs/EXTENDING_ARTEMIS.md)
+2. **Review documentation** - Read [RAG customization](docs/RAG_CUSTOMIZATION.md) and [docs index](docs/README.md)
 3. **Use templates** - Start with [template files](examples/templates/)
-4. **Quick reference** - Keep [Quick Reference](docs/QUICK_REFERENCE.md) handy
 
 ### Extension Guides
 
-- **[Extending A.R.T.E.M.I.S.](docs/EXTENDING_ARTEMIS.md)** - Comprehensive guide covering:
-
-  - Custom CSV Schema Converters
-  - Custom Chunking Strategies
-  - Custom Retrieval Strategies
-  - Custom Metadata Extractors
-  - Registration patterns and best practices
-
-- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Quick cheat sheet with:
-
-  - Registration decorators
-  - Function signatures
-  - Import paths
-  - Common code snippets
+- **[RAG customization](docs/RAG_CUSTOMIZATION.md)** - Chunk strategies, retrieval modes, and [adding new strategies](docs/RAG_CUSTOMIZATION.md#5-adding-new-strategies-automatic-vs-manual) (registry-driven or manual).
 
 - **[Template Files](docs/examples/templates_README.md)** - Ready-to-use boilerplate:
   - `template_csv_schema.py` - CSV schema converter template
@@ -566,9 +525,9 @@ ingest_file("document.pdf", FileType.PDF, indexer,
 For more examples, see:
 
 - [Travel Converter Example](docs/examples/README_travel_example.md)
-- [Agent Demo](examples/agent_demo.py) - LangGraph agent with RAG/direct routing
+- [Agent Demo](examples/agent_demo.py) - LangGraph agent (RAG via tools, multi-collection)
+- [Agent run](artemis/agent/run.py) - CLI: `python -m artemis.agent.run`
 - [Template Files](examples/templates/)
-- [test_queries.py](test_queries.py) - Interactive demo script
 
 ---
 
@@ -643,7 +602,7 @@ For detailed architecture information, see [ARCHITECTURE_FLOW.md](docs/ARCHITECT
 - ✅ Multiple chunking strategies
 - ✅ Semantic search
 - ✅ Extensible architecture with registry pattern
-- ✅ LangGraph agent orchestration (RAG vs direct routing)
+- ✅ LangGraph agent (planner–tool loop, RAG via tools, multi-collection)
 - 🔄 Multimodal inputs
 - 🔄 Advanced memory management
 
@@ -653,7 +612,7 @@ For detailed architecture information, see [ARCHITECTURE_FLOW.md](docs/ARCHITECT
 - 📅 Frontend dashboard
 - 📅 Custom LLM fine-tuning
 
-See [ROADMAP.md](docs/ROADMAP.md) for detailed progress and milestones.
+See the [Documentation](#-documentation) section and [docs/README.md](docs/README.md) for more.
 
 ---
 
@@ -665,7 +624,7 @@ See [ROADMAP.md](docs/ROADMAP.md) for detailed progress and milestones.
 
 - [x] **Adaptive RAG** - DSPy-optimized retrieval (90%+ recall)
 - [x] **File Ingestion** - Multiple file types and chunking strategies
-- [ ] **Agent Orchestration** - LangGraph multi-step planning
+- [x] **Agent Orchestration** - LangGraph planner–tool loop (RAG via tools, multi-collection)
 - [ ] **Multimodal Inputs** - Text, voice (LiveKit), vision
 - [ ] **Semantic Memory** - Short-term conversation context
 
@@ -684,7 +643,7 @@ See [ROADMAP.md](docs/ROADMAP.md) for detailed progress and milestones.
 - [ ] **SDK Distribution** - Python package distribution
 - [ ] **Monetized SDK Tier** - Paid tier with premium features
 
-See [ROADMAP.md](./ROADMAP.md) for detailed progress.
+See [Documentation](#-documentation) for current docs.
 
 ---
 
@@ -706,9 +665,8 @@ We'd love to hear from you! Here are the best ways to reach us:
 
 ### Documentation
 
-- **Full Documentation** - [docs/](docs/) directory
-- **Quick Start** - [docs/QUICK_START.md](docs/QUICK_START.md)
-- **Setup Guide** - [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)
+- **Full Documentation** - [docs/](docs/) directory and [docs/README.md](docs/README.md) index
+- **Agent Quick Start** - [docs/AGENT_QUICKSTART.md](docs/AGENT_QUICKSTART.md)
 
 ---
 
@@ -733,7 +691,7 @@ We'd love to hear from you! Here are the best ways to reach us:
 - **Documentation**: [docs/](docs/)
 - **Examples**: [examples/](examples/)
 - **Templates**: [examples/templates/](examples/templates/)
-- **Roadmap**: [ROADMAP.md](docs/ROADMAP.md)
+- **Documentation index**: [docs/README.md](docs/README.md)
 
 ---
 

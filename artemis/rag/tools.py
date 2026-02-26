@@ -22,7 +22,12 @@ try:
         clear_collection,
         delete_collection,
     )
-    from artemis.rag.ingestion import ingest_file, FileType
+    from artemis.rag.ingestion import (
+        ingest_file,
+        FileType,
+        ChunkStrategy,
+        DocumentSchema,
+    )
     _TOOLS_AVAILABLE = True
 except ImportError:
     Retriever = None
@@ -34,6 +39,8 @@ except ImportError:
     delete_collection = None
     ingest_file = None
     FileType = None
+    ChunkStrategy = None
+    DocumentSchema = None
     _TOOLS_AVAILABLE = False
 
 
@@ -73,8 +80,16 @@ def create_rag_ingest_tool(
         "text": FileType.TEXT,
     }
 
-    def ingest(path: str, file_type: str) -> Dict[str, Any]:
-        """Ingest a file into the knowledge base."""
+    def ingest(
+        path: str,
+        file_type: str,
+        chunk_strategy: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+        overlap: Optional[int] = None,
+        schema: Optional[str] = None,
+        llm_client: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Ingest a file into the knowledge base. Pass llm_client for agentic chunking."""
         path_obj = Path(path)
         if not path_obj.exists():
             return {"ok": False, "error": f"File not found: {path}"}
@@ -84,9 +99,61 @@ def create_rag_ingest_tool(
                 "ok": False,
                 "error": f"Unsupported file_type '{file_type}'. Use one of: csv, pdf, docx, md, text",
             }
+        ft_enum = _FILE_TYPE_MAP[ft_lower]
+        # CSV: only allow chunk_strategy csv_row or omit
+        if ft_lower == "csv" and chunk_strategy is not None:
+            cs_lower = chunk_strategy.strip().lower()
+            if cs_lower != "csv_row":
+                return {
+                    "ok": False,
+                    "error": f"For CSV files only chunk_strategy 'csv_row' or omit is allowed; got '{chunk_strategy}'",
+                    "path": path,
+                }
+        strategy_enum = None
+        if chunk_strategy is not None:
+            cs_lower = chunk_strategy.strip().lower()
+            try:
+                strategy_enum = ChunkStrategy(cs_lower)
+            except ValueError:
+                return {
+                    "ok": False,
+                    "error": f"Unknown chunk_strategy '{chunk_strategy}'. Use one of: semantic, fixed, fixed_overlap, agentic, csv_row (CSV only).",
+                    "path": path,
+                }
+        schema_enum = None
+        if schema is not None:
+            if ft_lower != "csv":
+                return {
+                    "ok": False,
+                    "error": "schema is only valid when file_type is csv.",
+                    "path": path,
+                }
+            try:
+                schema_enum = DocumentSchema(schema.strip().lower())
+            except ValueError:
+                return {
+                    "ok": False,
+                    "error": f"Unknown schema '{schema}'. Use one of: restaurant, travel, support.",
+                    "path": path,
+                }
+        chunk_kwargs: Dict[str, Any] = {}
+        if chunk_size is not None:
+            chunk_kwargs["chunk_size"] = chunk_size
+        if overlap is not None:
+            chunk_kwargs["overlap"] = overlap
+        if llm_client is not None:
+            chunk_kwargs["llm_client"] = llm_client
         try:
-            ingest_file(path_obj, _FILE_TYPE_MAP[ft_lower], indexer)
-            return {"ok": True, "path": path, "file_type": ft_lower}
+            ingest_file(
+                path_obj,
+                ft_enum,
+                indexer,
+                chunk_strategy=strategy_enum,
+                schema=schema_enum,
+                **chunk_kwargs,
+            )
+            collection = getattr(indexer, "collection_name", None)
+            return {"ok": True, "path": path, "file_type": ft_lower, "collection": collection}
         except Exception as e:
             logger.exception(f"Ingest failed for {path}: {e}")
             return {"ok": False, "error": str(e), "path": path}
@@ -116,8 +183,15 @@ def create_rag_ingest_directory_tool(
         "txt": FileType.TEXT,
     }
 
-    def ingest_directory(directory_path: str, file_extension: str = default_extension) -> Dict[str, Any]:
-        """Ingest all files in the directory with the given extension into the knowledge base."""
+    def ingest_directory(
+        directory_path: str,
+        file_extension: str = default_extension,
+        chunk_strategy: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+        overlap: Optional[int] = None,
+        llm_client: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Ingest all files in the directory with the given extension into the knowledge base. Pass llm_client for agentic chunking."""
         dir_path = Path(directory_path)
         if not dir_path.exists():
             return {"ok": False, "error": f"Directory not found: {directory_path}", "ingested_count": 0}
@@ -131,6 +205,23 @@ def create_rag_ingest_directory_tool(
             pattern = f"*.{ext}" if ext else "*.md"
             file_type_key = ext if ext in _FILE_TYPE_MAP else "md"
         ft = _FILE_TYPE_MAP.get(file_type_key, FileType.MD)
+        strategy_enum = None
+        if chunk_strategy is not None:
+            try:
+                strategy_enum = ChunkStrategy(chunk_strategy.strip().lower())
+            except ValueError:
+                return {
+                    "ok": False,
+                    "error": f"Unknown chunk_strategy '{chunk_strategy}'. Use one of: semantic, fixed, fixed_overlap, agentic.",
+                    "ingested_count": 0,
+                }
+        chunk_kwargs: Dict[str, Any] = {}
+        if chunk_size is not None:
+            chunk_kwargs["chunk_size"] = chunk_size
+        if overlap is not None:
+            chunk_kwargs["overlap"] = overlap
+        if llm_client is not None:
+            chunk_kwargs["llm_client"] = llm_client
         files = list(dir_path.rglob(pattern))
         ingested = 0
         errors = []
@@ -138,18 +229,175 @@ def create_rag_ingest_directory_tool(
             if not f.is_file():
                 continue
             try:
-                ingest_file(f, ft, indexer)
+                ingest_file(
+                    f,
+                    ft,
+                    indexer,
+                    chunk_strategy=strategy_enum,
+                    **chunk_kwargs,
+                )
                 ingested += 1
             except Exception as e:
                 errors.append(f"{f.name}: {e}")
                 logger.warning(f"Ingest failed for {f}: {e}")
+        collection = getattr(indexer, "collection_name", None)
         return {
             "ok": len(errors) == 0 or ingested > 0,
             "ingested_count": ingested,
             "failed_count": len(errors),
             "errors": errors[:10],
+            "collection": collection,
         }
     return ingest_directory
+
+
+# Extension -> file_type string for ingest tool
+_EXT_TO_FILETYPE = {
+    ".csv": "csv",
+    ".pdf": "pdf",
+    ".docx": "docx",
+    ".md": "md",
+    ".markdown": "md",
+    ".txt": "text",
+}
+_SUPPORTED_EXTENSIONS = set(_EXT_TO_FILETYPE.keys())
+
+
+def suggest_ingest_options(
+    path: str,
+    path_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Suggest ingest options (file_type, chunk_strategy, chunk_size, overlap, schema for CSV)
+    based on the given file or directory path. Use this before calling ingest_file or
+    ingest_directory so the agent can pass optimal options.
+
+    Args:
+        path: File path or directory path.
+        path_type: "file", "directory", or None to auto-detect (path exists as file vs dir).
+
+    Returns:
+        dict with recommended options and reasoning, e.g.:
+        - For file: file_type, chunk_strategy, chunk_size, overlap, schema (if CSV), reasoning.
+        - For directory: directory_path, file_extension, chunk_strategy, chunk_size, overlap,
+          file_count_by_ext (summary), reasoning.
+    """
+    p = Path(path)
+    if not p.exists():
+        return {
+            "ok": False,
+            "error": f"Path not found: {path}",
+            "reasoning": "Path does not exist; check the path and try again.",
+        }
+    is_dir = p.is_dir()
+    if path_type is not None:
+        if path_type.strip().lower() == "directory":
+            is_dir = True
+        elif path_type.strip().lower() == "file":
+            is_dir = False
+    try:
+        from artemis.rag.ingestion.chunkers.registry import (
+            DEFAULT_CHUNK_FOR_FILETYPE,
+            FileType,
+            ChunkStrategy,
+        )
+    except ImportError:
+        return {
+            "ok": False,
+            "error": "RAG ingestion module not available",
+            "reasoning": "Cannot suggest options without chunker registry.",
+        }
+    # Sensible defaults by strategy
+    chunk_size = 512
+    overlap = 64
+    reasoning_parts: List[str] = []
+
+    if is_dir:
+        files = [f for f in p.rglob("*") if f.is_file()]
+        ext_counts: Dict[str, int] = {}
+        for f in files:
+            ext = f.suffix.lower()
+            if ext in _EXT_TO_FILETYPE:
+                ext_counts[ext] = ext_counts.get(ext, 0) + 1
+        if not ext_counts:
+            return {
+                "ok": False,
+                "error": f"No supported files in directory: {path}",
+                "supported_extensions": list(_EXT_TO_FILETYPE.keys()),
+                "reasoning": "Directory has no files with extensions: csv, pdf, docx, md, txt.",
+            }
+        # Recommend dominant extension (prefer md/pdf for docs, then csv, then others)
+        order = (".md", ".pdf", ".txt", ".docx", ".csv")
+        dominant_ext = max(ext_counts.keys(), key=lambda e: (ext_counts[e], -(order.index(e) if e in order else 99)))
+        file_type_key = _EXT_TO_FILETYPE.get(dominant_ext, "md")
+        ft_enum = getattr(FileType, file_type_key.upper(), FileType.MD)
+        strategy = DEFAULT_CHUNK_FOR_FILETYPE.get(ft_enum, ChunkStrategy.FIXED_OVERLAP)
+        file_extension = dominant_ext.lstrip(".")
+        if file_extension == "text":
+            file_extension = "txt"
+        reasoning_parts.append(f"Directory has {sum(ext_counts.values())} supported file(s); dominant type: {file_extension} ({ext_counts.get(dominant_ext, 0)} files).")
+        reasoning_parts.append(f"Recommended chunk_strategy '{strategy.value}' and file_extension '{file_extension}' for this content type.")
+        out = {
+            "ok": True,
+            "path_type": "directory",
+            "directory_path": path,
+            "file_extension": file_extension,
+            "chunk_strategy": strategy.value,
+            "chunk_size": chunk_size,
+            "overlap": overlap,
+            "file_count_by_extension": ext_counts,
+            "reasoning": " ".join(reasoning_parts),
+        }
+        if file_type_key == "csv":
+            out["schema"] = "optional: one of restaurant, travel, support (use if CSV has matching structure)"
+        return out
+
+    # Single file
+    ext = p.suffix.lower()
+    if ext not in _EXT_TO_FILETYPE:
+        return {
+            "ok": False,
+            "error": f"Unsupported file extension: {ext}",
+            "path": path,
+            "supported_extensions": list(_EXT_TO_FILETYPE.keys()),
+            "reasoning": "Use a supported type: csv, pdf, docx, md, txt.",
+        }
+    file_type = _EXT_TO_FILETYPE[ext]
+    ft_enum = getattr(FileType, file_type.upper(), FileType.TEXT)
+    strategy = DEFAULT_CHUNK_FOR_FILETYPE.get(ft_enum, ChunkStrategy.FIXED_OVERLAP)
+    reasoning_parts.append(f"File type '{file_type}' detected; recommended chunk_strategy '{strategy.value}' for best results.")
+    out = {
+        "ok": True,
+        "path_type": "file",
+        "path": path,
+        "file_type": file_type,
+        "chunk_strategy": strategy.value,
+        "chunk_size": chunk_size,
+        "overlap": overlap,
+        "reasoning": " ".join(reasoning_parts),
+    }
+    if file_type == "csv":
+        try:
+            import csv as csv_module
+            with open(p, newline="", encoding="utf-8", errors="replace") as f:
+                reader = csv_module.reader(f)
+                headers = next(reader, [])
+            headers_lower = [h.strip().lower() for h in headers if isinstance(h, str)]
+            if headers_lower:
+                if any(k in " ".join(headers_lower) for k in ("name", "cuisine", "menu", "restaurant", "rating")):
+                    out["schema"] = "restaurant"
+                    out["reasoning"] += " CSV columns suggest schema 'restaurant'."
+                elif any(k in " ".join(headers_lower) for k in ("flight", "hotel", "destination", "travel", "booking")):
+                    out["schema"] = "travel"
+                    out["reasoning"] += " CSV columns suggest schema 'travel'."
+                elif any(k in " ".join(headers_lower) for k in ("ticket", "support", "customer", "issue", "status")):
+                    out["schema"] = "support"
+                    out["reasoning"] += " CSV columns suggest schema 'support'."
+                else:
+                    out["schema"] = "optional: restaurant, travel, or support if structure matches"
+        except Exception:
+            out["schema"] = "optional: restaurant, travel, or support if structure matches"
+    return out
 
 
 def list_collections_tool() -> List[str]:
@@ -229,6 +477,7 @@ __all__ = [
     "create_rag_search_tool",
     "create_rag_ingest_tool",
     "create_rag_ingest_directory_tool",
+    "suggest_ingest_options",
     "list_collections_tool",
     "get_collection_info_tool",
     "create_collection_tool",

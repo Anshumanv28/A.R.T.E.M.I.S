@@ -8,7 +8,7 @@ from typing import Optional
 from artemis.agent.config import AgentConfig
 from artemis.agent.graph import AgentGraph
 from artemis.agent.tools import ToolRegistry, build_rag_registry
-from artemis.rag.core.retriever import Retriever, RetrievalMode
+from artemis.rag.core.retriever import Retriever, RetrievalMode, RETRIEVAL_STRATEGIES
 from artemis.rag.core.indexer import Indexer
 from artemis.utils import get_logger
 
@@ -53,33 +53,124 @@ def run_agent(
             logger.error(f"Configuration error: {e}")
             raise
 
-    if registry is None:
-        if retriever is None:
-            if indexer is not None:
-                logger.info("Creating retriever from indexer")
-                retriever = Retriever(
-                    mode=RetrievalMode.SEMANTIC,
-                    indexer=indexer,
-                )
-            else:
-                logger.info("Creating indexer and retriever (requires env vars)")
-                indexer = Indexer(collection_name=collection_name)
-                retriever = Retriever(
-                    mode=RetrievalMode.SEMANTIC,
-                    indexer=indexer,
-                )
-        elif indexer is None:
-            indexer = getattr(retriever, "indexer", None)
-        registry = build_rag_registry(
-            retriever,
-            indexer=indexer,
-            default_k=config.retrieval_k,
-        )
+    SYSTEM_DOCS_COLLECTION = "artemis_system_docs"
+    USER_COLLECTION = "artemis_user_docs"
 
+    if registry is None:
+        if retriever is None and indexer is None:
+            # Multi-collection: agent can switch between system docs and user data by task
+            logger.info("Building multi-collection setup (artemis_system_docs + artemis_user_docs)")
+            from artemis.rag.core.embedder import Embedder
+            embedder = Embedder()
+            idx_system = Indexer(collection_name=SYSTEM_DOCS_COLLECTION, embedder=embedder)
+            idx_user = Indexer(collection_name=USER_COLLECTION, embedder=embedder)
+            indexers = {SYSTEM_DOCS_COLLECTION: idx_system, USER_COLLECTION: idx_user}
+            bm25_available = False
+            try:
+                from artemis.rag.strategies.keyword import BM25_AVAILABLE
+                bm25_available = BM25_AVAILABLE
+            except (ImportError, Exception):
+                pass
+            retrievers_by_collection = {}
+            for col_name, idx in indexers.items():
+                retrievers_by_collection[col_name] = {}
+                for mode in RETRIEVAL_STRATEGIES:
+                    if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not bm25_available:
+                        continue
+                    try:
+                        r = Retriever(mode=mode, indexer=idx)
+                        retrievers_by_collection[col_name][mode.value] = r
+                    except Exception as e:
+                        logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
+                if "semantic" not in retrievers_by_collection[col_name]:
+                    retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
+            llm_client_for_agentic = None
+            try:
+                if config.provider == "groq" and getattr(config, "groq_api_key", None):
+                    from artemis.agent.llm.groq_client import GroqClient
+                    llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+                elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+                    from artemis.agent.llm.openai_client import OpenAIClient
+                    llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+            except Exception as e:
+                logger.debug("Could not create LLM client for agentic chunking: %s", e)
+            registry = build_rag_registry(
+                retriever=None,
+                indexer=None,
+                default_k=config.retrieval_k,
+                retrievers=None,
+                llm_client_for_agentic=llm_client_for_agentic,
+                indexers=indexers,
+                retrievers_by_collection=retrievers_by_collection,
+                default_collection=USER_COLLECTION,
+            )
+            current_collection = None
+        else:
+            # Single-collection path
+            if retriever is None:
+                if indexer is not None:
+                    logger.info("Creating retriever from indexer")
+                    retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+                else:
+                    logger.info("Creating indexer and retriever (requires env vars)")
+                    indexer = Indexer(collection_name=collection_name)
+                    retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+            elif indexer is None:
+                indexer = getattr(retriever, "indexer", None)
+            idx = indexer or getattr(retriever, "indexer", None)
+            retrievers = {}
+            bm25_available = False
+            try:
+                from artemis.rag.strategies.keyword import BM25_AVAILABLE
+                bm25_available = BM25_AVAILABLE
+            except (ImportError, Exception):
+                pass
+            for mode in RETRIEVAL_STRATEGIES:
+                if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and (not bm25_available or idx is None):
+                    continue
+                try:
+                    if mode == RetrievalMode.SEMANTIC and idx is None:
+                        r = retriever
+                    else:
+                        if idx is None:
+                            continue
+                        r = Retriever(mode=mode, indexer=idx)
+                    retrievers[mode.value] = r
+                except Exception as e:
+                    logger.debug("Skipping retrieval mode %s: %s", mode.value, e)
+            if "semantic" not in retrievers:
+                retrievers["semantic"] = retriever
+            llm_client_for_agentic = None
+            try:
+                if config.provider == "groq" and getattr(config, "groq_api_key", None):
+                    from artemis.agent.llm.groq_client import GroqClient
+                    llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+                elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+                    from artemis.agent.llm.openai_client import OpenAIClient
+                    llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+            except Exception as e:
+                logger.debug("Could not create LLM client for agentic chunking: %s", e)
+            registry = build_rag_registry(
+                retriever,
+                indexer=indexer,
+                default_k=config.retrieval_k,
+                retrievers=retrievers,
+                llm_client_for_agentic=llm_client_for_agentic,
+            )
+            current_collection = None
+            if indexer is not None and hasattr(indexer, "collection_name"):
+                current_collection = indexer.collection_name
+            elif retriever is not None and getattr(retriever, "collection_name", None):
+                current_collection = retriever.collection_name
+            else:
+                current_collection = collection_name
+    else:
+        current_collection = None
     agent = AgentGraph(
         config=config,
         registry=registry,
         max_tool_steps=config.max_tool_steps,
+        current_collection=current_collection,
     )
     result = agent.invoke(query)
     return dict(result)
@@ -98,7 +189,12 @@ def main():
     parser.add_argument(
         "--collection",
         default="artemis_documents",
-        help="Qdrant collection name (default: artemis_documents)",
+        help="Qdrant collection name when using --single-collection (default: artemis_documents)",
+    )
+    parser.add_argument(
+        "--single-collection",
+        action="store_true",
+        help="Use a single collection for all ingest and search (legacy). Default is multi-collection (artemis_system_docs + artemis_user_docs); agent chooses by task.",
     )
     parser.add_argument(
         "--provider",
@@ -125,16 +221,20 @@ def main():
         print("\nMake sure to set GROQ_API_KEY or OPENAI_API_KEY in your .env file")
         sys.exit(1)
 
-    try:
-        indexer = Indexer(collection_name=args.collection)
-        retriever = Retriever(
-            mode=RetrievalMode.SEMANTIC,
-            indexer=indexer,
-        )
-    except Exception as e:
-        print(f"Failed to create retriever: {e}")
-        print("\nMake sure QDRANT_URL and QDRANT_API_KEY are set in your .env file")
-        sys.exit(1)
+    # Default: multi-collection (artemis_system_docs + artemis_user_docs). If you don't use system docs, it behaves like single-collection; when you do, the agent uses system collection as context.
+    indexer = None
+    retriever = None
+    if getattr(args, "single_collection", False):
+        try:
+            indexer = Indexer(collection_name=args.collection)
+            retriever = Retriever(
+                mode=RetrievalMode.SEMANTIC,
+                indexer=indexer,
+            )
+        except Exception as e:
+            print(f"Failed to create retriever: {e}")
+            print("\nMake sure QDRANT_URL and QDRANT_API_KEY are set in your .env file")
+            sys.exit(1)
 
     if not args.query:
         print("=" * 70)
@@ -142,7 +242,10 @@ def main():
         print("=" * 70)
         print(f"Provider: {config.provider}")
         print(f"Model: {config.model_name}")
-        print(f"Collection: {args.collection}")
+        if retriever is None:
+            print("Mode: multi-collection (artemis_system_docs + artemis_user_docs); agent chooses by task. Use --single-collection to pin to one collection.")
+        else:
+            print(f"Mode: single collection (all ingest and search): {args.collection}")
         print("\nEnter queries (or 'quit' to exit):\n")
 
         while True:
@@ -181,7 +284,12 @@ def main():
 
     else:
         try:
-            result = run_agent(args.query, retriever=retriever, indexer=indexer, config=config)
+            result = run_agent(
+                args.query,
+                retriever=retriever,
+                indexer=indexer,
+                config=config,
+            )
             print(result.get("final_answer", "No answer generated"))
 
             if result.get("error"):

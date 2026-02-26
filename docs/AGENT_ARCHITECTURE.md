@@ -45,4 +45,6 @@ The A.R.T.E.M.I.S agent follows a **ReAct-style** (Reasoning + Acting) design: a
 
 - **DSPy** – The registry design (name + callable + optional schema) is compatible with using DSPy modules as callable implementations later (e.g. `dspy_rag(**tool_args)`), which fits DSPy’s recommended integration with larger agent systems.
 
+- **RAG options from registries** – Search modes and chunk strategies offered to the agent are derived from the RAG registries (`RETRIEVAL_STRATEGIES`, `CHUNKERS`, `CSV_CONVERTERS`). Adding a new strategy in code and registering it (e.g. `@register_strategy`, `@register_chunker`) makes it visible to the agent after restart, with no change to the agent or tool-registry code. A manual override is possible to restrict or replace what the agent sees. See [RAG customization – Adding new strategies](RAG_CUSTOMIZATION.md#5-adding-new-strategies-automatic-vs-manual).
+
 For how to use RAG with this agent (search, ingest, collections), see [RAG usage](RAG_USAGE.md).

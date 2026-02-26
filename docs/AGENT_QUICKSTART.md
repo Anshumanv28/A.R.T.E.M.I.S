@@ -1,335 +1,191 @@
 # Agent Layer Quick Start Guide
 
-The A.R.T.E.M.I.S agent layer provides a LangGraph-based orchestration system that intelligently routes queries between RAG (Retrieval-Augmented Generation) and direct answer paths.
+The A.R.T.E.M.I.S agent is a LangGraph-based orchestration system that routes queries between **tool use** (e.g. RAG search, ingest) and **direct answer**. There is **no dedicated RAG node**—RAG is invoked when the planner selects the `search_documents` tool (or ingest/collection tools). The agent can use multiple collections and choose by task (system docs vs user data).
 
 ## Overview
 
-The agent layer consists of:
-- **Planner Node**: Classifies query intent (RAG vs direct)
-- **RAG Node**: Retrieves documents and synthesizes answers with citations
-- **Direct Answer Node**: Answers queries without document retrieval
-- **Graph Orchestration**: Routes between nodes based on intent
+The agent consists of:
+
+- **Planner node** – Classifies intent: use one **tool** (e.g. `search_documents`, `ingest_directory`, `get_rag_options`) or answer **directly** (e.g. from prior tool results or general knowledge). When the user asks how the system works, the planner should choose `search_documents` on the system collection first.
+- **Tool node** – Runs the chosen tool (search, ingest, list collections, etc.) and appends the result to state, then returns to the planner.
+- **Direct-answer node** – Produces the final reply from the query and prior tool results (e.g. retrieved chunks, ingest outcome).
+
+Default mode is **multi-collection**: `artemis_system_docs` (system/docs/RAG context) and `artemis_user_docs` (user data). The planner is instructed to pass `collection_name` when calling search/ingest so the agent can switch by task. Use `--single-collection` only when you want one collection for everything.
 
 ## Prerequisites
 
-1. **Environment Variables**: Set up your `.env` file with required API keys:
+1. **Environment variables** – Set up your `.env` file:
+
    ```bash
-   # Required for Groq (default provider)
    GROQ_API_KEY=your-groq-api-key
-   
-   # Optional for OpenAI
-   OPENAI_API_KEY=your-openai-api-key
-   
-   # Required for RAG functionality
+   # or OPENAI_API_KEY for OpenAI
+
    QDRANT_URL=your-qdrant-url
    QDRANT_API_KEY=your-qdrant-api-key
    ```
 
-2. **Dependencies**: Install required packages:
-   ```bash
-   pip install -e .
-   ```
+2. **Dependencies** – `pip install -e .`
 
-3. **Indexed Documents**: Ensure you have documents indexed in Qdrant (see [PDF RAG Example](../examples/README_PDF_RAG.md))
+3. **Documents** – For RAG answers, ingest documents (e.g. into `artemis_system_docs` or `artemis_user_docs`) or use the agent’s `ingest_file` / `ingest_directory` tools. See [PDF RAG Example](examples/README_PDF_RAG.md) and [Agent test prompts](AGENT_TEST_PROMPTS.md).
 
 ## Quick Start
 
-### Basic Usage
+### Default: multi-collection (recommended)
 
 ```python
 from artemis.agent import run_agent
-from artemis.rag.core.indexer import Indexer
-from artemis.rag.core.retriever import Retriever, RetrievalMode
 
-# Step 1: Create indexer and retriever (if you haven't already)
-indexer = Indexer(collection_name="my_documents")
-# ... index your documents ...
-
-retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
-
-# Step 2: Run agent with a query
-result = run_agent(
-    query="What is the main topic of the documents?",
-    retriever=retriever
-)
-
-# Step 3: Access the answer
+# No retriever/indexer: run_agent builds artemis_system_docs + artemis_user_docs
+# and registers RAG tools. The agent chooses collection by task.
+result = run_agent("What chunking strategies are available?")
 print(result["final_answer"])
-print(f"Intent: {result['intent']}")
-print(f"Confidence: {result['confidence']:.2f}")
-print(f"Retrieved {len(result['retrieved_docs'])} documents")
+print("Intent:", result["intent"])
+print("Tool calls:", len(result.get("tool_calls", [])))
 ```
 
-### Using Custom Configuration
+### Single-collection (legacy)
 
 ```python
-from artemis.agent import AgentConfig, AgentGraph
-from artemis.rag.core.retriever import Retriever, RetrievalMode
+from artemis.agent import run_agent
+from artemis.rag.core import Indexer, Retriever, RetrievalMode
 
-# Create custom config
-config = AgentConfig(
-    provider="groq",  # or "openai"
-    model_name="llama-3.3-70b-versatile",
-    max_tokens=2048,
-    temperature=0.7,
-    retrieval_k=5
+indexer = Indexer(collection_name="my_documents")
+retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+# ... optionally ingest files with indexer ...
+
+result = run_agent(
+    "What is the main topic of the documents?",
+    retriever=retriever,
+    indexer=indexer,
 )
-
-# Create retriever
-retriever = Retriever(mode=RetrievalMode.SEMANTIC, collection_name="my_documents")
-
-# Create agent graph
-agent = AgentGraph(config=config, retriever=retriever)
-
-# Run query
-result = agent.invoke("What are the key points?")
-
 print(result["final_answer"])
 ```
 
-### Command Line Interface
+### Command line
 
-Run the agent interactively:
+Interactive (default multi-collection):
 
 ```bash
 python -m artemis.agent.run
 ```
 
-Or with a single query:
+Single query:
 
 ```bash
 python -m artemis.agent.run "What is the main topic?"
 ```
 
-With custom options:
+Single-collection mode:
 
 ```bash
-python -m artemis.agent.run \
-    --collection my_documents \
-    --provider groq \
-    --model llama-3.3-70b-versatile \
-    "Your query here"
+python -m artemis.agent.run --single-collection --collection my_documents "Your query"
 ```
 
-## How It Works
+Options: `--provider groq|openai`, `--model <name>`.
 
-### Flow Diagram
+## How it works
+
+### Flow
 
 ```
-Start → Planner → [Intent Classification]
+Start → Planner → [intent?]
                     ↓
-            ┌───────┴───────┐
-            │               │
-        intent=rag    intent=direct
-            │               │
-            ↓               ↓
-        RAG Node    Direct Answer Node
-            │               │
-            └───────┬───────┘
-                    ↓
-                   END
+         ┌─────────┴─────────┐
+         │                    │
+    intent=tool          intent=direct
+         │                    │
+         ↓                    ↓
+    Tool node          Direct-answer node
+    (search_documents,      │
+     ingest_file, ...)      ↓
+         │                  END
+         ↓
+    (loop back to Planner)
 ```
 
-### Intent Classification
+- **Planner** – Chooses one of: call a tool (`intent="tool"` with `tool_name` and `tool_args`) or answer now (`intent="direct"`). For questions about how this agent/system works, the planner is instructed to call `search_documents` with `collection_name: "artemis_system_docs"` first.
+- **Tool node** – Runs `registry.get(tool_name).callable(**tool_args)`, appends result to `tool_calls`, increments `step_count`, returns to planner.
+- **Direct-answer node** – Uses the query and a summary of `tool_calls` to generate `final_answer`, then END.
 
-The planner node uses an LLM to classify queries:
+### RAG as tools
 
-- **RAG Path**: Used when query asks about:
-  - Specific documents or indexed content
-  - Information that might be in the knowledge base
-  - Document-specific questions ("what does X say about Y")
+RAG is not a separate path. When the user needs to search or ingest, the planner selects:
 
-- **Direct Path**: Used when query:
-  - Is a general question not referencing documents
-  - Asks for concept explanations
-  - Is conversational without needing retrieval
+- `search_documents` – with optional `collection_name`, `search_mode`, `k`
+- `ingest_file` / `ingest_directory` – with optional `collection_name`, `chunk_strategy`, etc.
+- `suggest_ingest_options` – get recommended options for a path before ingesting
+- `get_rag_options` – list search modes and chunk strategies
+- Collection tools: `list_collections`, `get_collection_info`, `create_collection`, etc.
 
-### RAG Node Process
+The direct-answer node then uses the tool results (e.g. retrieved chunks) to synthesize the reply.
 
-1. **Retrieve**: Calls `Retriever.retrieve()` to get top-k documents
-2. **Format**: Formats documents with scores and metadata
-3. **Synthesize**: Uses LLM to generate answer with citations [1], [2], etc.
-4. **Return**: Stores both `retrieved_docs` and `final_answer` in state
+### State shape
 
-## Configuration Options
+```python
+{
+    "query": str,
+    "intent": "tool" | "direct",
+    "tool_name": str | None,
+    "tool_args": dict | None,
+    "tool_calls": list[dict],   # each: tool_name, tool_args, result, ok
+    "step_count": int,
+    "final_answer": str,
+    "confidence": float,
+    "reasoning": str,
+    "error": str | None,
+}
+```
 
-### Environment Variables
+There is no top-level `retrieved_docs`; retrieved content appears inside the relevant `tool_calls` entry when the tool was `search_documents`.
 
-You can configure the agent via environment variables:
+## Configuration
+
+### Environment variables
 
 ```bash
-# LLM Provider (groq or openai)
 ARTEMIS_LLM_PROVIDER=groq
-
-# Model name
 ARTEMIS_LLM_MODEL=llama-3.3-70b-versatile
-
-# Generation parameters
 ARTEMIS_MAX_TOKENS=2048
 ARTEMIS_TEMPERATURE=0.7
-
-# Retrieval parameters
 ARTEMIS_RETRIEVAL_K=5
 ```
 
-### Programmatic Configuration
+### Programmatic
 
 ```python
 from artemis.agent import AgentConfig
 
-# From environment with overrides
-config = AgentConfig.from_env(
-    provider="openai",
-    model_name="gpt-4o-mini",
-    temperature=0.5
-)
-
-# Direct instantiation
-config = AgentConfig(
-    provider="groq",
-    model_name="llama-3.3-70b-versatile",
-    max_tokens=2048,
-    temperature=0.7,
-    retrieval_k=5,
-    groq_api_key="your-key"  # Optional if in env
-)
+config = AgentConfig.from_env(provider="openai", model_name="gpt-4o-mini")
+result = run_agent("Your query", config=config)
 ```
 
-## State Structure
-
-The agent state contains:
+## Advanced: custom registry
 
 ```python
-{
-    "query": str,                    # Input query
-    "intent": "rag" | "direct",      # Classified intent
-    "confidence": float,             # Confidence score (0.0-1.0)
-    "retrieved_docs": List[Dict],    # Retrieved documents (RAG path)
-    "tool_calls": List[Dict],        # Tool calls (future)
-    "final_answer": str,             # Generated answer
-    "error": Optional[str]           # Error message if any
-}
-```
+from artemis.agent import run_agent, AgentConfig
+from artemis.agent.tools import ToolRegistry, build_rag_registry
 
-## Examples
-
-### Example 1: Document Query (RAG Path)
-
-```python
-result = run_agent(
-    query="What does the HR policy say about vacation days?",
-    retriever=retriever
+config = AgentConfig.from_env()
+registry = build_rag_registry(
+    retriever=my_retriever,
+    indexer=my_indexer,
+    default_k=5,
+    retrievers=my_retrievers_by_mode,
+    llm_client_for_agentic=my_llm,
 )
-
-# Result will use RAG path
-print(result["intent"])  # "rag"
-print(result["final_answer"])  # Answer with citations
-print(len(result["retrieved_docs"]))  # Number of retrieved docs
+result = run_agent("Your query", config=config, registry=registry)
 ```
 
-### Example 2: General Question (Direct Path)
-
-```python
-result = run_agent(
-    query="What is machine learning?",
-    retriever=retriever
-)
-
-# Result will use direct path
-print(result["intent"])  # "direct"
-print(result["final_answer"])  # Direct answer
-print(len(result["retrieved_docs"]))  # 0
-```
-
-## Error Handling
-
-The agent handles errors gracefully:
-
-- **Retrieval Errors**: Falls back to direct answer or error message
-- **LLM Errors**: Returns error in state with partial results
-- **Configuration Errors**: Raises ValueError with helpful messages
-
-Check for errors:
-
-```python
-result = run_agent(query="...", retriever=retriever)
-
-if result.get("error"):
-    print(f"Error: {result['error']}")
-else:
-    print(result["final_answer"])
-```
-
-## Advanced Usage
-
-### Custom Retriever
-
-```python
-from artemis.rag.core.retriever import Retriever, RetrievalMode
-from artemis.rag.core.indexer import Indexer
-
-# Create indexer with custom settings
-indexer = Indexer(
-    collection_name="custom_collection",
-    embedder=Embedder(model_name="custom-model")
-)
-
-# Create retriever
-retriever = Retriever(
-    mode=RetrievalMode.SEMANTIC,
-    indexer=indexer
-)
-
-# Use with agent
-result = run_agent(query="...", retriever=retriever)
-```
-
-### Async Usage
-
-```python
-import asyncio
-from artemis.agent import AgentConfig, AgentGraph
-
-async def main():
-    config = AgentConfig.from_env()
-    retriever = Retriever(...)
-    agent = AgentGraph(config=config, retriever=retriever)
-    
-    result = await agent.ainvoke("Your query")
-    print(result["final_answer"])
-
-asyncio.run(main())
-```
+For multi-collection, build the registry with `indexers`, `retrievers_by_collection`, and `default_collection` (see `run_agent` in `artemis/agent/run.py`).
 
 ## Troubleshooting
 
-### "GROQ_API_KEY not found"
-- Set `GROQ_API_KEY` in your `.env` file
-- Or pass `groq_api_key` parameter to `AgentConfig`
+- **"GROQ_API_KEY not found"** – Set `GROQ_API_KEY` or `OPENAI_API_KEY` in `.env`.
+- **"Collection does not exist"** – Ingest documents first or use an existing collection name; in multi-collection mode collections are created on first ingest.
+- **Agent says it doesn’t have information** – For questions about the system (planner, graph, RAG), ensure system docs are ingested into `artemis_system_docs` and the planner is calling `search_documents` with `collection_name: "artemis_system_docs"`. See [Agent architecture](AGENT_ARCHITECTURE.md) and [Agent test prompts](AGENT_TEST_PROMPTS.md).
 
-### "Collection does not exist"
-- Ensure documents are indexed in Qdrant
-- Check collection name matches your indexer
+## Next steps
 
-### "No documents retrieved"
-- Verify documents are indexed
-- Check query relevance
-- Try increasing `retrieval_k` in config
-
-### Low Confidence Scores
-- Normal for ambiguous queries
-- Agent defaults to RAG path on low confidence
-- Adjust planner prompts if needed
-
-## Next Steps
-
-- Explore the [PDF RAG Example](../examples/README_PDF_RAG.md) for document indexing
-- Check [Architecture Flow](../ARCHITECTURE_FLOW.md) for system overview
-- See [Main README](../README.md) for project details
-
-## Notes
-
-- The agent layer is a thin orchestration wrapper around existing RAG components
-- All RAG internals remain unchanged
-- Tool execution and multi-step reasoning are planned for future phases
-- Current implementation focuses on single-turn Q&A with optional RAG
+- [Agent architecture](AGENT_ARCHITECTURE.md) – Planner–tool loop, registry, no dedicated RAG path
+- [RAG usage](RAG_USAGE.md) – Standalone RAG and agent RAG tools (search, ingest, multi-collection)
+- [Agent test prompts](AGENT_TEST_PROMPTS.md) – Example prompts and retrieval-test queries

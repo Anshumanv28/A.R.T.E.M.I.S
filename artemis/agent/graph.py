@@ -36,6 +36,7 @@ class AgentGraph:
         config: AgentConfig,
         registry: ToolRegistry,
         max_tool_steps: int = 10,
+        current_collection: str | None = None,
     ):
         """
         Initialize agent graph.
@@ -44,10 +45,12 @@ class AgentGraph:
             config: Agent configuration
             registry: Tool registry (planner and tool_node use it)
             max_tool_steps: Max tool calls per run; after this, route to direct_answer
+            current_collection: Name of the collection used for ingest/search this session (shown in planner so the agent can tell the user)
         """
         self.config = config
         self.registry = registry
         self.max_tool_steps = max_tool_steps
+        self.current_collection = current_collection
         self.graph = self._build_graph()
         logger.info("Agent graph initialized with tool registry")
 
@@ -62,6 +65,7 @@ class AgentGraph:
                 self.config,
                 self.registry,
                 max_tool_steps=self.max_tool_steps,
+                current_collection=self.current_collection,
             ),
         )
         workflow.add_node(

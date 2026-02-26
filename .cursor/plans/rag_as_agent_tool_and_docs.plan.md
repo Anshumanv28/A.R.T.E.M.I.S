@@ -5,15 +5,19 @@ todos: []
 isProject: false
 ---
 
+**Implementation note (current state):** This plan has been implemented. The **dedicated RAG node was removed**. The agent graph now has three nodes only: **planner**, **tool_node**, **direct_answer**. RAG is invoked when the planner selects the `search_documents` (or ingest/collection) tool; the tool node runs it and the direct-answer node synthesizes from results. Multi-collection mode (`artemis_system_docs` + `artemis_user_docs`) is the default. See [Agent architecture](artemis/agent/graph.py), [AGENT_QUICKSTART.md](../docs/AGENT_QUICKSTART.md), and [RAG_USAGE.md](../docs/RAG_USAGE.md).
+
+---
+
 # RAG system: agent tool readiness and documentation
 
-## Current state
+## Current state (at time of plan)
 
 - **Standalone RAG**: Anyone can use [artemis.rag](artemis/rag/__init__.py) to ingest data (`Indexer` + `ingest_file`) and retrieve (`Retriever.retrieve()`). Works without the agent.
-- **Agent**: [AgentGraph](artemis/agent/graph.py) takes a `Retriever`; the [planner](artemis/agent/nodes/planner.py) classifies intent (rag vs direct); [rag_node](artemis/agent/nodes/rag_node.py) uses that retriever to fetch docs and synthesize an answer. So RAG is already used by the agent, but as a **fixed path** (planner to rag_node), not as callable tools.
-- **Collection management**: [artemis/rag/core/collection_manager.py](artemis/rag/core/collection_manager.py) provides list_collections, get_collection_info, create_collection, clear_collection, delete_collection. Users can do all of this; the agent currently cannot.
+- **Agent**: [AgentGraph](artemis/agent/graph.py) took a `Retriever`; the [planner](artemis/agent/nodes/planner.py) classified intent (rag vs direct); a **rag_node** used that retriever to fetch docs and synthesize. RAG was a fixed path.
+- **Collection management**: [artemis/rag/core/collection_manager.py](artemis/rag/core/collection_manager.py) provides list_collections, get_collection_info, create_collection, clear_collection, delete_collection.
 
-What's missing: (1) clear docs for standalone and agent use, (2) callable RAG tools so the agent can retrieve, ingest, and manage collections the same way a user can.
+What was missing: (1) clear docs for standalone and agent use, (2) callable RAG tools so the agent could retrieve, ingest, and manage collections the same way a user can. **Now implemented: RAG is exposed as tools; rag_node removed; graph is planner → tool_node | direct_answer.**
 
 ---
 
@@ -53,7 +57,7 @@ Users can do everything with RAG via [artemis/rag/core/collection_manager.py](ar
 
 **Safety:** Clear and delete already require confirm=True in collection_manager. Tool wrappers pass through a confirm argument so the agent only succeeds when the app sets it after user approval. Document this in RAG_USAGE.md.
 
-**Use in agent:** Current graph unchanged; rag_node keeps using the injected retriever. These tools are for when you add a tool-calling node: register them so the agent can search, ingest, and manage collections.
+**Use in agent:** Implemented. The graph no longer has a rag_node. The planner chooses the search_documents (or other RAG) tool; the tool_node runs it. Registry is built in run_agent via build_rag_registry; multi-collection is default.
 
 ---
 
@@ -63,6 +67,6 @@ Users can do everything with RAG via [artemis/rag/core/collection_manager.py](ar
 |------|--------|
 | Docs | Add docs/RAG_USAGE.md (overview, prerequisites, standalone, agent, full RAG tools including ingest and collection management). Link from docs/README.md. |
 | RAG tools | Add artemis/rag/tools.py with: search, ingest, list_collections, get_collection_info, create_collection, clear_collection, delete_collection. Each wraps collection_manager or Indexer/ingest_file/Retriever. Destructive ops require confirm. Export from artemis/rag/__init__.py. |
-| Agent graph | No change; rag_node keeps using the injected retriever. Tools are ready for a future tool-calling node. |
+| Agent graph | Implemented: rag_node removed. Graph is planner → tool_node | direct_answer. RAG is invoked via tools (search_documents, ingest, etc.). |
 
 Result: the agent can do everything a user can do with RAG (retrieve, ingest, list/create/get/clear/delete collections), via the same APIs, exposed as callable tools; plus documentation on how to use the RAG system and how to bind these tools safely.
