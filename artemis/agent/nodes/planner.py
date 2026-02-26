@@ -150,6 +150,7 @@ def planner_node(
     config: AgentConfig,
     registry: ToolRegistry,
     max_tool_steps: int = 10,
+    system_prompt_override: Optional[str] = None,
     current_collection: Optional[str] = None,
 ) -> AgentState:
     """
@@ -200,12 +201,15 @@ def planner_node(
             'Use artemis_user_docs for user data, ingested content, and any other task (default). When the user asks which collection is in use, explain that you choose by task: system docs vs user data.'
         )
 
-    system_prompt = load_planner_prompt(
-        tools_blob=tools_blob,
-        rag_options=rag_options,
-        current_collection_line=current_collection_line,
-        max_tool_steps=max_tool_steps,
-    )
+    if system_prompt_override is not None:
+        system_prompt = system_prompt_override
+    else:
+        system_prompt = load_planner_prompt(
+            tools_blob=tools_blob,
+            rag_options=rag_options,
+            current_collection_line=current_collection_line,
+            max_tool_steps=max_tool_steps,
+        )
 Available tools:
 {tools_blob}
 
