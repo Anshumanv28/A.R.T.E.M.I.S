@@ -16,6 +16,118 @@ from artemis.utils import get_logger
 
 logger = get_logger(__name__)
 
+SYSTEM_DOCS_COLLECTION = "artemis_system_docs"
+USER_COLLECTION = "artemis_user_docs"
+
+
+def _build_registry_v2(
+    config: AgentConfig,
+    retriever=None,
+    indexer=None,
+    collection_name: str = "artemis_documents",
+) -> ToolRegistry:
+    """
+    Build the RAG tool registry for v2 (Supervisor) once. Reuse the returned
+    registry across multiple run_agent_v2 calls to avoid rebuilding Embedder/Indexers/Retrievers.
+    """
+    if retriever is None and indexer is None:
+        logger.info("Building multi-collection setup (artemis_system_docs + artemis_user_docs)")
+        from artemis.rag.core.embedder import Embedder
+        embedder = Embedder()
+        idx_system = Indexer(collection_name=SYSTEM_DOCS_COLLECTION, embedder=embedder)
+        idx_user = Indexer(collection_name=USER_COLLECTION, embedder=embedder)
+        indexers = {SYSTEM_DOCS_COLLECTION: idx_system, USER_COLLECTION: idx_user}
+        bm25_available = False
+        try:
+            from artemis.rag.strategies.keyword import BM25_AVAILABLE
+            bm25_available = BM25_AVAILABLE
+        except (ImportError, Exception):
+            pass
+        retrievers_by_collection = {}
+        for col_name, idx in indexers.items():
+            retrievers_by_collection[col_name] = {}
+            for mode in RETRIEVAL_STRATEGIES:
+                if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not bm25_available:
+                    continue
+                try:
+                    r = Retriever(mode=mode, indexer=idx)
+                    retrievers_by_collection[col_name][mode.value] = r
+                except Exception as e:
+                    logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
+            if "semantic" not in retrievers_by_collection[col_name]:
+                retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
+        llm_client_for_agentic = None
+        try:
+            if config.provider == "groq" and getattr(config, "groq_api_key", None):
+                from artemis.agent.llm.groq_client import GroqClient
+                llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+            elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+                from artemis.agent.llm.openai_client import OpenAIClient
+                llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+        except Exception as e:
+            logger.debug("Could not create LLM client for agentic chunking: %s", e)
+        return build_rag_registry(
+            retriever=None,
+            indexer=None,
+            default_k=config.retrieval_k,
+            retrievers=None,
+            llm_client_for_agentic=llm_client_for_agentic,
+            indexers=indexers,
+            retrievers_by_collection=retrievers_by_collection,
+            default_collection=USER_COLLECTION,
+        )
+    # Single-collection path
+    if retriever is None:
+        if indexer is not None:
+            logger.info("Creating retriever from indexer")
+            retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+        else:
+            logger.info("Creating indexer and retriever (requires env vars)")
+            indexer = Indexer(collection_name=collection_name)
+            retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+    elif indexer is None:
+        indexer = getattr(retriever, "indexer", None)
+    idx = indexer or getattr(retriever, "indexer", None)
+    retrievers = {}
+    bm25_available = False
+    try:
+        from artemis.rag.strategies.keyword import BM25_AVAILABLE
+        bm25_available = BM25_AVAILABLE
+    except (ImportError, Exception):
+        pass
+    for mode in RETRIEVAL_STRATEGIES:
+        if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and (not bm25_available or idx is None):
+            continue
+        try:
+            if mode == RetrievalMode.SEMANTIC and idx is None:
+                r = retriever
+            else:
+                if idx is None:
+                    continue
+                r = Retriever(mode=mode, indexer=idx)
+            retrievers[mode.value] = r
+        except Exception as e:
+            logger.debug("Skipping retrieval mode %s: %s", mode.value, e)
+    if "semantic" not in retrievers:
+        retrievers["semantic"] = retriever
+    llm_client_for_agentic = None
+    try:
+        if config.provider == "groq" and getattr(config, "groq_api_key", None):
+            from artemis.agent.llm.groq_client import GroqClient
+            llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+        elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+            from artemis.agent.llm.openai_client import OpenAIClient
+            llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+    except Exception as e:
+        logger.debug("Could not create LLM client for agentic chunking: %s", e)
+    return build_rag_registry(
+        retriever,
+        indexer=indexer,
+        default_k=config.retrieval_k,
+        retrievers=retrievers,
+        llm_client_for_agentic=llm_client_for_agentic,
+    )
+
 
 def run_agent(
     query: str,
@@ -189,6 +301,7 @@ def run_agent_v2(
     """
     Run the agent using the Supervisor + sub-agent architecture.
     Builds config and registry the same way as run_agent() when not provided.
+    Pass a pre-built registry to reuse the RAG stack across multiple queries (e.g. interactive loop).
     Loads system context from the registry, creates a Supervisor, and dispatches the query.
     Returns the final agent state as a dict (same shape as run_agent).
     """
@@ -199,109 +312,8 @@ def run_agent_v2(
             logger.error(f"Configuration error: {e}")
             raise
 
-    SYSTEM_DOCS_COLLECTION = "artemis_system_docs"
-    USER_COLLECTION = "artemis_user_docs"
-
     if registry is None:
-        if retriever is None and indexer is None:
-            # Multi-collection: agent can switch between system docs and user data by task
-            logger.info("Building multi-collection setup (artemis_system_docs + artemis_user_docs)")
-            from artemis.rag.core.embedder import Embedder
-            embedder = Embedder()
-            idx_system = Indexer(collection_name=SYSTEM_DOCS_COLLECTION, embedder=embedder)
-            idx_user = Indexer(collection_name=USER_COLLECTION, embedder=embedder)
-            indexers = {SYSTEM_DOCS_COLLECTION: idx_system, USER_COLLECTION: idx_user}
-            bm25_available = False
-            try:
-                from artemis.rag.strategies.keyword import BM25_AVAILABLE
-                bm25_available = BM25_AVAILABLE
-            except (ImportError, Exception):
-                pass
-            retrievers_by_collection = {}
-            for col_name, idx in indexers.items():
-                retrievers_by_collection[col_name] = {}
-                for mode in RETRIEVAL_STRATEGIES:
-                    if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not bm25_available:
-                        continue
-                    try:
-                        r = Retriever(mode=mode, indexer=idx)
-                        retrievers_by_collection[col_name][mode.value] = r
-                    except Exception as e:
-                        logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
-                if "semantic" not in retrievers_by_collection[col_name]:
-                    retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
-            llm_client_for_agentic = None
-            try:
-                if config.provider == "groq" and getattr(config, "groq_api_key", None):
-                    from artemis.agent.llm.groq_client import GroqClient
-                    llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
-                elif config.provider == "openai" and getattr(config, "openai_api_key", None):
-                    from artemis.agent.llm.openai_client import OpenAIClient
-                    llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
-            except Exception as e:
-                logger.debug("Could not create LLM client for agentic chunking: %s", e)
-            registry = build_rag_registry(
-                retriever=None,
-                indexer=None,
-                default_k=config.retrieval_k,
-                retrievers=None,
-                llm_client_for_agentic=llm_client_for_agentic,
-                indexers=indexers,
-                retrievers_by_collection=retrievers_by_collection,
-                default_collection=USER_COLLECTION,
-            )
-        else:
-            # Single-collection path (do not copy current_collection — only for AgentGraph)
-            if retriever is None:
-                if indexer is not None:
-                    logger.info("Creating retriever from indexer")
-                    retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
-                else:
-                    logger.info("Creating indexer and retriever (requires env vars)")
-                    indexer = Indexer(collection_name=collection_name)
-                    retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
-            elif indexer is None:
-                indexer = getattr(retriever, "indexer", None)
-            idx = indexer or getattr(retriever, "indexer", None)
-            retrievers = {}
-            bm25_available = False
-            try:
-                from artemis.rag.strategies.keyword import BM25_AVAILABLE
-                bm25_available = BM25_AVAILABLE
-            except (ImportError, Exception):
-                pass
-            for mode in RETRIEVAL_STRATEGIES:
-                if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and (not bm25_available or idx is None):
-                    continue
-                try:
-                    if mode == RetrievalMode.SEMANTIC and idx is None:
-                        r = retriever
-                    else:
-                        if idx is None:
-                            continue
-                        r = Retriever(mode=mode, indexer=idx)
-                    retrievers[mode.value] = r
-                except Exception as e:
-                    logger.debug("Skipping retrieval mode %s: %s", mode.value, e)
-            if "semantic" not in retrievers:
-                retrievers["semantic"] = retriever
-            llm_client_for_agentic = None
-            try:
-                if config.provider == "groq" and getattr(config, "groq_api_key", None):
-                    from artemis.agent.llm.groq_client import GroqClient
-                    llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
-                elif config.provider == "openai" and getattr(config, "openai_api_key", None):
-                    from artemis.agent.llm.openai_client import OpenAIClient
-                    llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
-            except Exception as e:
-                logger.debug("Could not create LLM client for agentic chunking: %s", e)
-            registry = build_rag_registry(
-                retriever,
-                indexer=indexer,
-                default_k=config.retrieval_k,
-                retrievers=retrievers,
-                llm_client_for_agentic=llm_client_for_agentic,
-            )
+        registry = _build_registry_v2(config, retriever, indexer, collection_name)
 
     system_context = load_system_context(registry)
     supervisor = Supervisor(
@@ -392,6 +404,11 @@ def main():
             print(f"Mode: single collection (all ingest and search): {args.collection}")
         print("\nEnter queries (or 'quit' to exit):\n")
 
+        # For v2, build registry once so we don't rebuild Embedder/Indexers/Retrievers per query
+        v2_registry = None
+        if args.v2:
+            v2_registry = _build_registry_v2(config, retriever, indexer, args.collection)
+
         while True:
             try:
                 query = input("Query: ").strip()
@@ -402,7 +419,7 @@ def main():
                     continue
 
                 if args.v2:
-                    result = run_agent_v2(query, retriever=retriever, indexer=indexer, config=config)
+                    result = run_agent_v2(query, registry=v2_registry, config=config)
                 else:
                     result = run_agent(query, retriever=retriever, indexer=indexer, config=config)
 

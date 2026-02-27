@@ -68,6 +68,7 @@ class IngestionPrompt(BasePrompt):
         lines.append(_format_tools(tools))
         lines.append("")
         lines.append("Rules — FOLLOW IN ORDER:")
+        lines.append("0. When the user asks about options or best practices WITHOUT specifying a path (e.g. 'best options for a PDF?', 'what chunking for markdown?'): use get_rag_options and answer from that—do NOT call suggest_ingest_options (it requires an existing file/directory path).")
         lines.append("1. When given a file or directory path: ALWAYS call suggest_ingest_options FIRST with the path. Do not skip this step.")
         lines.append("2. Read the returned file_type, chunk_strategy, chunk_size, overlap, and schema from the suggest_ingest_options result")
         lines.append("3. Use those exact values when calling ingest_file (for a file) or ingest_directory (for a directory)")

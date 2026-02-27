@@ -64,13 +64,14 @@ class RAGSearchPrompt(BasePrompt):
         lines.append(_format_tools(tools))
         lines.append("")
         lines.append("Rules:")
-        lines.append("1. Call search_documents with the most relevant collection_name for the query")
+        lines.append("1. For questions about 'ingested content', 'main topic', 'what documents are there', or 'summarize'—call search_documents first; do NOT answer direct without search results.")
+        lines.append("2. Call search_documents with the most relevant collection_name for the query")
         lines.append(
-            '2. After ONE successful search that returned results, use intent="direct" to synthesize — never call search_documents again in the same session'
+            '3. After ONE successful search that returned results, use intent="direct" to synthesize — never call search_documents again in the same session'
         )
-        lines.append('3. If search returns empty results, use intent="direct" to say no results found')
-        lines.append("4. Use list_collections or get_collection_info only when the user asks about collection state")
-        lines.append(f"5. You have at most {max_tool_steps} tool calls total")
+        lines.append('4. If search returns empty results, use intent="direct" to say no results found')
+        lines.append("5. Use list_collections or get_collection_info only when the user asks about collection state")
+        lines.append(f"6. You have at most {max_tool_steps} tool calls total")
         lines.append("")
         lines.append(JSON_FORMAT_LINE)
         return "\n".join(lines)

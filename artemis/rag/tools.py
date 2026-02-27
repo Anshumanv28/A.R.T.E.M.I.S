@@ -90,7 +90,7 @@ def create_rag_ingest_tool(
         llm_client: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Ingest a file into the knowledge base. Pass llm_client for agentic chunking."""
-        path_obj = Path(path)
+        path_obj = _resolve_path(path)
         if not path_obj.exists():
             return {"ok": False, "error": f"File not found: {path}"}
         ft_lower = file_type.strip().lower()
@@ -190,9 +190,10 @@ def create_rag_ingest_directory_tool(
         chunk_size: Optional[int] = None,
         overlap: Optional[int] = None,
         llm_client: Optional[Any] = None,
+        recursive: bool = False,
     ) -> Dict[str, Any]:
-        """Ingest all files in the directory with the given extension into the knowledge base. Pass llm_client for agentic chunking."""
-        dir_path = Path(directory_path)
+        """Ingest files in the directory with the given extension. By default only files directly in the directory are ingested (no subdirectories). Set recursive=True to include subdirectories. Pass llm_client for agentic chunking."""
+        dir_path = _resolve_path(directory_path)
         if not dir_path.exists():
             return {"ok": False, "error": f"Directory not found: {directory_path}", "ingested_count": 0}
         if not dir_path.is_dir():
@@ -222,7 +223,7 @@ def create_rag_ingest_directory_tool(
             chunk_kwargs["overlap"] = overlap
         if llm_client is not None:
             chunk_kwargs["llm_client"] = llm_client
-        files = list(dir_path.rglob(pattern))
+        files = list(dir_path.rglob(pattern) if recursive else dir_path.glob(pattern))
         ingested = 0
         errors = []
         for f in files:
@@ -263,6 +264,19 @@ _EXT_TO_FILETYPE = {
 _SUPPORTED_EXTENSIONS = set(_EXT_TO_FILETYPE.keys())
 
 
+def _resolve_path(path: str) -> Path:
+    """Resolve path for filesystem use. If path has leading slashes and does not exist, try relative to cwd (e.g. /docs -> docs on Windows)."""
+    path = path.strip()
+    p = Path(path)
+    if p.exists():
+        return p
+    if path.startswith(("/", "\\")):
+        alt = path.lstrip("/\\")
+        if alt and Path(alt).exists():
+            return Path(alt)
+    return p
+
+
 def suggest_ingest_options(
     path: str,
     path_type: Optional[str] = None,
@@ -282,7 +296,7 @@ def suggest_ingest_options(
         - For directory: directory_path, file_extension, chunk_strategy, chunk_size, overlap,
           file_count_by_ext (summary), reasoning.
     """
-    p = Path(path)
+    p = _resolve_path(path)
     if not p.exists():
         return {
             "ok": False,

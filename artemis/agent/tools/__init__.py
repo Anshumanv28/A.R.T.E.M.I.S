@@ -284,6 +284,7 @@ def build_rag_registry(
                     chunk_size=kwargs.get("chunk_size"),
                     overlap=kwargs.get("overlap"),
                     llm_client=llm,
+                    recursive=bool(kwargs.get("recursive", False)),
                 )
 
             ingest_dir_schema = {
@@ -291,6 +292,11 @@ def build_rag_registry(
                 "properties": {
                     "directory_path": {"type": "string"},
                     "file_extension": {"type": "string", "default": "md"},
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "If false (default), only files directly in the directory are ingested. If true, include all matching files in subdirectories.",
+                        "default": False,
+                    },
                     "collection_name": {
                         "type": "string",
                         "description": "Which collection to ingest into. artemis_system_docs for system docs; artemis_user_docs for user data (default).",
@@ -319,6 +325,7 @@ def build_rag_registry(
                     chunk_size=kwargs.get("chunk_size"),
                     overlap=kwargs.get("overlap"),
                     llm_client=llm,
+                    recursive=bool(kwargs.get("recursive", False)),
                 )
 
             ingest_dir_schema = {
@@ -326,6 +333,11 @@ def build_rag_registry(
                 "properties": {
                     "directory_path": {"type": "string"},
                     "file_extension": {"type": "string", "default": "md"},
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "If false (default), only files directly in the directory are ingested. If true, include all matching files in subdirectories.",
+                        "default": False,
+                    },
                     "chunk_strategy": {
                         "type": "string",
                         "description": "Optional. One of: " + ", ".join(chunk_strategy_enum) + ".",
@@ -340,7 +352,7 @@ def build_rag_registry(
         registry.register(
             "ingest_directory",
             ingest_directory_kw,
-            description="Ingest all files in a directory (e.g. RAG_demo/techcorp_docs). When multiple collections exist, pass collection_name. file_extension: md, pdf, txt, etc.; default md. Optional: chunk_strategy, chunk_size, overlap.",
+            description="Ingest files in a directory. By default only files directly in the directory (no subdirectories); set recursive=true to include subdirectories. file_extension: md, pdf, txt, etc.; default md. Optional: chunk_strategy, chunk_size, overlap. When multiple collections exist, pass collection_name.",
             parameters_schema=ingest_dir_schema,
         )
 
