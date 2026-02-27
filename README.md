@@ -10,6 +10,35 @@
 
 ---
 
+## 📑 Table of Contents
+
+- [What is A.R.T.E.M.I.S.?](#-what-is-artemis)
+- [Features Overview](#-features-overview)
+- [Quick Start](#-quick-start)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+- [Running the System](#-running-the-system)
+  - [Step 1: Set Up Qdrant](#step-1-set-up-qdrant)
+  - [Step 2: Ingest Your Data](#step-2-ingest-your-data)
+  - [Step 3: Query Your Data](#step-3-query-your-data)
+  - [Step 4: Run the Demo](#step-4-run-the-demo)
+- [What's Available](#-whats-available)
+- [Documentation](#-documentation)
+- [For Developers](#-for-developers)
+- [For Contributors](#-for-contributors)
+- [Examples](#-examples)
+- [Architecture](#-architecture)
+- [Project Status](#-project-status)
+- [Roadmap](#-roadmap)
+- [Get in Touch](#-get-in-touch)
+- [Support & Community](#-support--community)
+- [License](#-license)
+- [Acknowledgments](#-acknowledgments)
+
+---
+
 ## 🎯 What is A.R.T.E.M.I.S.?
 
 A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** designed for developers who need intelligent assistants that can:
@@ -24,43 +53,62 @@ A.R.T.E.M.I.S. is an **adaptive, generalizable AI agent/chatbot framework** desi
 
 ---
 
-## ✨ MVP Features (Phase 1)
+## ✨ Features Overview
 
-### 🎯 Core 4 - Out of the Box
+### Currently Available (MVP)
 
-1. **Adaptive RAG** - DSPy-optimized retrieval (90%+ recall)
-2. **Agent Orchestration** - LangGraph multi-step planning
-3. **Multimodal Inputs** - Text, voice (LiveKit), vision
-4. **Semantic Memory** - Short-term conversation context
+- ✅ **Adaptive RAG** - DSPy-optimized retrieval (90%+ recall)
+- ✅ **File Ingestion** - Support for CSV, PDF, DOCX, Markdown, and Text files
+- ✅ **CSV Schema Converters** - RESTAURANT and TRAVEL schemas
+- ✅ **Chunking Strategies** - CSV_ROW, FIXED, FIXED_OVERLAP, SEMANTIC, AGENTIC (LLM-driven)
+- ✅ **Semantic Search** - Vector-based retrieval with Qdrant
+- ✅ **Extensible Architecture** - Registry pattern for custom components
+- ✅ **LangGraph Agent** - Planner–tool loop: RAG via tools (search, ingest, suggest options), multi-collection by default ([Quick Start](docs/AGENT_QUICKSTART.md))
 
-**Note**: Data chunking is intentionally skipped in MVP since we're working with small datasets. Chunking will be added in Phase 2 for handling larger datasets efficiently.
+### Coming Soon (Phase 2-3)
+- 🔜 **Multimodal Inputs** - Text, voice (LiveKit), vision
+- 🔜 **Dynamic Tool Registry** - Documentation-driven tool registration
+- 🔜 **Advanced Vector Memory** - Long-term context management
+- 🔜 **Frontend Dashboard** - React interface for configuration
+- 🔜 **Fine-Tuned Custom LLM** - Custom Llama3 70B model
 
-## 🚀 Coming Soon (Phase 2-3)
-
-- **Dynamic Tool Registry** - Documentation-driven tool registration (YAML/OpenAPI). Tools automatically registered/unregistered as they're added/removed on the backend
-- **Advanced Vector Memory** - Qdrant semantic search for long-term context
-- **Data Chunking** - Intelligent text chunking for large datasets e.g faqs, reviews, menu (currently skipped for small datasets)
-- **Document Schema Converters** - Additional schema types for different use cases:
-  - ✅ **RESTAURANT** - Available now (MVP, fully implemented)
-  - ✅ **TRAVEL** - Travel planning (cities, attractions, hotels) - Available now
-  - 🔜 **SUPPORT** - FAQ/support tickets - Phase 2 (not yet implemented)
-  - 🔜 **ECOMMERCE** - Product catalogs - Phase 2 (not yet implemented)
-- **Frontend Dashboard** - React interface with tool selection (checkboxes/selectable boxes), configuration, memory management, and page navigation
-- **FastAPI Backend APIs** - Production-ready REST APIs for tools and memory
-- **Fine-Tuned Custom LLM** - Custom Llama3 70B model fine-tuned for your use-cases
-- **Monetized SDK Tier** - Paid tier with premium features (advanced memory, custom models)
+See [Roadmap](#-roadmap) for detailed progress.
 
 ---
 
 ## 🚀 Quick Start
 
+Get A.R.T.E.M.I.S. running in 5 minutes:
+
+```bash
+# 1. Clone and install
+git clone https://github.com/Anshumanv28/ARTEMIS.git
+cd ARTEMIS
+pip install -r requirements.txt
+
+# 2. Set up environment
+export QDRANT_URL="your-qdrant-url"
+export QDRANT_API_KEY="your-api-key"
+
+# 3. Run the agent (default: multi-collection)
+python -m artemis.agent.run
+```
+
+For detailed setup, see [Getting Started](#-getting-started). For the agent, see [Agent Quick Start](docs/AGENT_QUICKSTART.md).
+
+---
+
+## 🏁 Getting Started
+
 ### Prerequisites
 
-- Python 3.12+
-- [Groq API Key](https://console.groq.com/) (free tier available)
-- [Qdrant Cloud](https://cloud.qdrant.io/) account (free tier available)
+- **Python 3.12+** - [Download Python](https://www.python.org/downloads/)
+- **Qdrant Account** - [Qdrant Cloud](https://cloud.qdrant.io/) (free tier available) or local Qdrant instance
+- **Git** - For cloning the repository
 
 ### Installation
+
+#### Option 1: From Source (Recommended)
 
 ```bash
 # Clone the repository
@@ -70,102 +118,466 @@ cd ARTEMIS
 # Install dependencies
 pip install -r requirements.txt
 
-# Set up environment variables
-export GROQ_API_KEY="your-groq-api-key"
-export QDRANT_URL="your-qdrant-url"
-export QDRANT_API_KEY="your-qdrant-api-key"
+# Or install in development mode
+pip install -e .
 ```
 
-### Basic Usage
+#### Option 2: Docker (Coming Soon)
+
+```bash
+docker-compose up
+```
+
+### Configuration
+
+Create a `.env` file in the project root:
+
+```env
+# Required
+QDRANT_URL=your-qdrant-url
+QDRANT_API_KEY=your-qdrant-api-key
+
+# Optional
+GROQ_API_KEY=your-groq-api-key
+LIVEKIT_URL=your-livekit-url
+LIVEKIT_API_KEY=your-livekit-api-key
+```
+
+Or set environment variables:
+
+```bash
+export QDRANT_URL="your-qdrant-url"
+export QDRANT_API_KEY="your-api-key"
+```
+
+**Getting Qdrant Credentials:**
+
+1. **Qdrant Cloud** (Recommended for quick start):
+
+   - Sign up at [cloud.qdrant.io](https://cloud.qdrant.io/)
+   - Create a free cluster
+   - Copy the URL and API key from the dashboard
+
+2. **Local Qdrant** (For development):
+   ```bash
+   docker run -p 6333:6333 qdrant/qdrant
+   # Then use: QDRANT_URL="http://localhost:6333"
+   ```
+
+For detailed setup instructions, see [Getting Started](#-getting-started) above and [docs/README.md](docs/README.md).
+
+---
+
+## 🏃 Running the System
+
+### Step 1: Set Up Qdrant
+
+Choose one of the following:
+
+**Option A: Qdrant Cloud (Recommended)**
+
+1. Sign up at [cloud.qdrant.io](https://cloud.qdrant.io/)
+2. Create a free cluster
+3. Copy your cluster URL and API key
+
+**Option B: Local Qdrant**
+
+```bash
+docker run -p 6333:6333 qdrant/qdrant
+# Use QDRANT_URL="http://localhost:6333" and leave API key empty
+```
+
+### Step 2: Ingest Your Data
 
 ```python
-from artemis import Agent
+from artemis.rag import Indexer, FileType, ingest_file, DocumentSchema
 
-# Initialize agent with your data
-agent = Agent(
-    data_path="./your-data/",
-    use_case="restaurant"  # or "travel", "e-commerce", etc.
+# Create indexer (manages Qdrant connection and embeddings)
+indexer = Indexer(
+    qdrant_url="your-qdrant-url",  # or use env var
+    qdrant_api_key="your-api-key",  # or use env var
+    collection_name="my_documents"
 )
 
-# Chat with the agent
-response = agent.chat("What are your restaurant recommendations?")
-print(response)
+# Ingest files
+ingest_file("restaurants.csv", FileType.CSV, indexer,
+            schema=DocumentSchema.RESTAURANT)
+ingest_file("manual.pdf", FileType.PDF, indexer)
+ingest_file("docs/readme.md", FileType.MD, indexer)
+```
 
-# Add a new tool dynamically
-agent.add_tool_from_yaml("tools/weather_api.yaml")
+### Step 3: Query Your Data
 
-# Use the new tool
-response = agent.chat("What's the weather like today?")
+```python
+from artemis.rag import Retriever, RetrievalMode
+
+# Create retriever (use same indexer for consistency)
+retriever = Retriever(
+    mode=RetrievalMode.SEMANTIC,
+    indexer=indexer  # Recommended: ensures same embedder
+)
+
+# Query
+results = retriever.retrieve("Italian restaurants in Mumbai", k=5)
+
+for result in results:
+    print(f"Score: {result['score']:.4f}")
+    print(f"Text: {result['text']}")
+    print(f"Metadata: {result['metadata']}")
+    print()
+```
+
+### Step 4: Run the Agent
+
+```bash
+# Interactive mode (default: multi-collection)
+python -m artemis.agent.run
+
+# Single query
+python -m artemis.agent.run "What is the main topic?"
+```
+
+**What the agent does:**
+
+- ✅ Uses two collections by default: `artemis_system_docs` (system/docs) and `artemis_user_docs` (user data)
+- ✅ Routes between tool use (search, ingest) and direct answer via a planner
+- ✅ Accepts custom queries in interactive mode
+
+**Requirements:**
+
+- Qdrant instance running (cloud or local)
+- Environment variables set (QDRANT_URL, QDRANT_API_KEY). Optional: GROQ_API_KEY or OPENAI API key for the LLM.
+
+See [Agent Quick Start](docs/AGENT_QUICKSTART.md) and [Agent test prompts](docs/AGENT_TEST_PROMPTS.md) for example queries and retrieval tests.
+
+### Complete Example Script
+
+```python
+#!/usr/bin/env python3
+"""Complete example: Ingest and query data."""
+
+from artemis.rag import (
+    Indexer, Retriever, RetrievalMode,
+    FileType, DocumentSchema, ingest_file
+)
+
+# 1. Setup
+indexer = Indexer(collection_name="demo")
+retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+
+# 2. Ingest
+ingest_file("data/restaurants.csv", FileType.CSV, indexer,
+            schema=DocumentSchema.RESTAURANT)
+
+# 3. Query
+results = retriever.retrieve("Italian restaurants", k=3)
+for r in results:
+    print(f"{r['score']:.3f}: {r['text'][:100]}...")
+```
+
+### Step 5: Use the LangGraph Agent (Optional)
+
+The agent uses a planner–tool loop: RAG is invoked via tools (e.g. `search_documents`, `ingest_file`), and the planner chooses between calling a tool or answering directly. Default is **multi-collection** (`artemis_system_docs` + `artemis_user_docs`).
+
+**Default (multi-collection):**
+
+```python
+from artemis.agent import run_agent
+
+# No indexer/retriever: agent uses artemis_system_docs and artemis_user_docs
+result = run_agent("What does the document say about X?")
+print(result["final_answer"])
+print(f"Intent: {result.get('intent', 'unknown')}")   # "tool" or "direct"
+print(f"Confidence: {result.get('confidence', 0):.2f}")
+```
+
+**Single-collection (optional):**
+
+```python
+from artemis.agent import run_agent
+from artemis.rag.core import Indexer, Retriever, RetrievalMode
+
+indexer = Indexer(collection_name="my_documents")
+retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+result = run_agent("What does the document say about X?", retriever=retriever, indexer=indexer)
+print(result["final_answer"])
+```
+
+See [Agent Quick Start](docs/AGENT_QUICKSTART.md) for detailed usage.
+
+---
+
+## 📋 What's Available
+
+Before extending A.R.T.E.M.I.S., here's what you get out of the box:
+
+### File Types Supported
+
+- ✅ **CSV** - Structured data (restaurants, travel, products, etc.)
+- ✅ **PDF** - Documents, manuals, reports
+- ✅ **DOCX** - Word documents
+- ✅ **Markdown** - Documentation, README files
+- ✅ **TEXT** - Plain text files
+
+### CSV Schema Converters
+
+- ✅ **RESTAURANT** - Restaurant data (fully implemented)
+- ✅ **TRAVEL** - Travel/hotel bookings (fully implemented)
+- 🔜 **SUPPORT** - FAQ/support tickets (coming soon)
+
+### Chunking Strategies
+
+- ✅ **CSV_ROW** - Row-based chunking for CSV files (default for CSV)
+- ✅ **FIXED** - Fixed-size chunks without overlap
+- ✅ **FIXED_OVERLAP** - Fixed-size chunks with overlap (default for PDF/DOCX/TEXT)
+- ✅ **SEMANTIC** - Sentence/paragraph-aware chunking (default for Markdown)
+- ✅ **AGENTIC** - LLM-driven semantic chunking (when `llm_client` provided; else falls back to FIXED_OVERLAP)
+
+### Retrieval Strategies
+
+- ✅ **SEMANTIC** - Semantic vector search (fully implemented, default)
+- ⚠️ **KEYWORD** - BM25/TF-IDF keyword search (placeholder, raises NotImplementedError)
+- ⚠️ **HYBRID** - Combined semantic + keyword (placeholder, raises NotImplementedError)
+
+### Quick Check: What's Registered?
+
+```python
+# Check available CSV schemas
+from artemis.rag.ingestion.converters.csv_converter import CSV_CONVERTERS
+print("Available CSV schemas:", list(CSV_CONVERTERS.keys()))
+
+# Check available chunkers
+from artemis.rag.ingestion.chunkers.registry import CHUNKERS
+print("Available chunkers:", list(CHUNKERS.keys()))
+
+# Check available retrieval strategies
+from artemis.rag.core.retriever import RETRIEVAL_STRATEGIES
+print("Available strategies:", list(RETRIEVAL_STRATEGIES.keys()))
 ```
 
 ---
 
-## 📖 Use Cases
+## 📚 Documentation
 
-A.R.T.E.M.I.S. adapts to any domain with minimal configuration:
+### Core Documentation
 
-| Use Case                 | Description                               | Example                           |
-| ------------------------ | ----------------------------------------- | --------------------------------- |
-| **Customer Support**     | Intelligent chatbot for your product      | "How do I reset my password?"     |
-| **E-commerce Assistant** | Product recommendations and queries       | "Show me laptops under $1000"     |
-| **Travel Agent**         | Trip planning and booking assistance      | "Plan a 3-day trip to Paris"      |
-| **Restaurant Guide**     | Menu recommendations and reservations     | "Find Italian restaurants nearby" |
-| **Internal Tools**       | Company-specific knowledge base assistant | "What's our refund policy?"       |
+- **[Agent Quick Start](docs/AGENT_QUICKSTART.md)** - Run the agent (multi-collection default, CLI, state)
+- **[Agent test prompts](docs/AGENT_TEST_PROMPTS.md)** - Example prompts and retrieval tests
+- **[RAG usage](docs/RAG_USAGE.md)** - Standalone RAG and agent RAG tools (search, ingest, multi-collection)
+- **[Documentation index](docs/README.md)** - Full list of docs
 
-**Just provide your data** - A.R.T.E.M.I.S. learns the rest.
+### Technical Documentation
+
+- **[Architecture Flow](docs/ARCHITECTURE_FLOW.md)** - RAG pipeline: load, chunk, index, retrieve
+- **[Agent architecture](docs/AGENT_ARCHITECTURE.md)** - Planner–tool loop, registry, no dedicated RAG node
+- **[RAG customization](docs/RAG_CUSTOMIZATION.md)** - Chunk/retrieval options and adding strategies
+
+### Examples & Templates
+
+- **[Travel Converter Example](docs/examples/README_travel_example.md)** - CSV schema converter guide
+- **[Template Files](docs/examples/templates_README.md)** - Boilerplate code for custom components
+- **[Travel Converter Script](examples/travel_converter_example.py)** - Working example
+
+### Documentation Index
+
+See [docs/README.md](docs/README.md) for a complete documentation index.
+
+---
+
+## 👨‍💻 For Developers
+
+### Should I Extend A.R.T.E.M.I.S.?
+
+**Only extend if:**
+
+- ❌ Built-in features don't meet your needs
+- ❌ You need domain-specific logic
+- ❌ You want to customize behavior
+
+**Don't extend if:**
+
+- ✅ Auto-detect works fine for your CSV
+- ✅ Default chunking is sufficient
+- ✅ Semantic search meets your needs
+
+### Getting Started with Extensions
+
+1. **Check what's available** - See [What's Available](#-whats-available) section
+2. **Review documentation** - Read [RAG customization](docs/RAG_CUSTOMIZATION.md) and [docs index](docs/README.md)
+3. **Use templates** - Start with [template files](examples/templates/)
+
+### Extension Guides
+
+- **[RAG customization](docs/RAG_CUSTOMIZATION.md)** - Chunk strategies, retrieval modes, and [adding new strategies](docs/RAG_CUSTOMIZATION.md#5-adding-new-strategies-automatic-vs-manual) (registry-driven or manual).
+
+- **[Template Files](docs/examples/templates_README.md)** - Ready-to-use boilerplate:
+  - `template_csv_schema.py` - CSV schema converter template
+  - `template_chunker.py` - Chunking strategy template
+  - `template_retrieval_strategy.py` - Retrieval strategy template
+  - `template_metadata_extractor.py` - Metadata extractor template
+
+---
+
+## 🤝 For Contributors
+
+We welcome contributions! A.R.T.E.M.I.S. is built for the community.
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/Anshumanv28/ARTEMIS.git
+cd ARTEMIS
+
+# Install in development mode
+pip install -e .
+
+# Install development dependencies
+pip install -r requirements.txt
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test_csv_converter.py
+
+# Run with coverage
+pytest --cov=artemis tests/
+```
+
+### Code Style
+
+- **Formatting**: We use [black](https://github.com/psf/black) for code formatting
+- **Linting**: Follow PEP 8 guidelines
+- **Type Hints**: Include type hints for all functions
+
+```bash
+# Format code
+black artemis/
+
+# Check formatting
+black --check artemis/
+```
+
+### Contribution Workflow
+
+1. **Fork the repository**
+2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+3. **Make your changes**
+4. **Run tests** (`pytest tests/`)
+5. **Format code** (`black artemis/`)
+6. **Commit your changes** (`git commit -m 'Add amazing feature'`)
+7. **Push to the branch** (`git push origin feature/amazing-feature`)
+8. **Open a Pull Request**
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines (if available).
+
+---
+
+## 🎓 Examples
+
+### Example 1: Restaurant Assistant
+
+```python
+from artemis.rag import Indexer, Retriever, RetrievalMode, FileType, ingest_file, DocumentSchema
+
+# Setup
+indexer = Indexer(collection_name="restaurants")
+ingest_file("restaurants.csv", FileType.CSV, indexer, schema=DocumentSchema.RESTAURANT)
+
+retriever = Retriever(mode=RetrievalMode.SEMANTIC, indexer=indexer)
+
+# Query
+results = retriever.retrieve("Italian restaurants in Mumbai", k=5)
+for result in results:
+    print(f"{result['score']:.3f}: {result['text']}")
+```
+
+### Example 2: Multi-File Ingestion
+
+```python
+from artemis.rag import Indexer, FileType, ingest_file
+
+indexer = Indexer(collection_name="documents")
+
+# Ingest multiple file types
+ingest_file("data.csv", FileType.CSV, indexer)
+ingest_file("manual.pdf", FileType.PDF, indexer)
+ingest_file("readme.md", FileType.MD, indexer)
+```
+
+### Example 3: Custom Chunking
+
+```python
+from artemis.rag import Indexer, FileType, ingest_file, ChunkStrategy
+
+indexer = Indexer(collection_name="documents")
+
+# Use semantic chunking for PDF
+ingest_file("document.pdf", FileType.PDF, indexer,
+            chunk_strategy=ChunkStrategy.SEMANTIC, chunk_size=1500)
+```
+
+For more examples, see:
+
+- [Travel Converter Example](docs/examples/README_travel_example.md)
+- [Agent Demo](examples/agent_demo.py) - LangGraph agent (RAG via tools, multi-collection)
+- [Agent run](artemis/agent/run.py) - CLI: `python -m artemis.agent.run`
+- [Template Files](examples/templates/)
 
 ---
 
 ## 🏗️ Architecture
 
+A.R.T.E.M.I.S. follows a modular architecture with clear separation of concerns:
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   A.R.T.E.M.I.S. Agent                   │
+│                   A.R.T.E.M.I.S. Agent                  │
 ├─────────────────────────────────────────────────────────┤
-│                                                           │
+│                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
 │  │   Multimodal │  │  RAG Engine  │  │   Tool       │   │
 │  │   Inputs     │→ │  (DSPy)      │→ │   Registry   │   │
 │  │              │  │              │  │              │   │
 │  └──────────────┘  └──────────────┘  └──────────────┘   │
-│         │                 │                   │          │
-│         │                 │         ┌─────────▼──────┐   │
-│         │                 │         │ Documentation  │   │
-│         │                 │         │ Watcher        │   │
+│         │                 │                   │         │
+│         │                 │         ┌─────────▼──────┐  │
+│         │                 │         │ Documentation  │  │
+│         │                 │         │ Watcher        │  │
 │         │                 │         │ (YAML/OpenAPI)│   │
-│         │                 │         └────────────────┘   │
-│         └─────────────────┼───────────────────┘          │
-│                           │                               │
-│                  ┌────────▼────────┐                      │
-│                  │  LangGraph      │                      │
-│                  │  Orchestrator   │                      │
-│                  └────────┬────────┘                      │
-│                           │                               │
-│                  ┌────────▼────────┐                      │
-│                  │  Qdrant Memory │                      │
-│                  │  (Semantic)     │                      │
-│                  └─────────────────┘                      │
-│                                                           │
+│         │                 │         └────────────────┘  │
+│         └─────────────────┼───────────────────┘         │
+│                           │                             │
+│                  ┌────────▼────────┐                    │
+│                  │  LangGraph      │                    │
+│                  │  Orchestrator   │                    │
+│                  └────────┬────────┘                    │
+│                           │                             │
+│                  ┌────────▼────────┐                    │
+│                  │  Qdrant Memory │                     │
+│                  │  (Semantic)     │                    │
+│                  └─────────────────┘                    │
+│                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 🔧 Dynamic Tool Registry Architecture
+### Key Components
 
-The tool registry uses a **documentation-driven approach** for maximum reliability:
+- **RAG Engine** - Document ingestion, chunking, indexing, and retrieval
+- **Tool Registry** - Dynamic tool registration via YAML/OpenAPI files
+- **LangGraph Orchestrator** - Multi-step agent planning
+- **Qdrant Memory** - Vector-based semantic memory
 
-1. **Backend File Watcher**: Monitors `tools/` directory for YAML/OpenAPI files
-2. **Automatic Registration**: When a new tool file is added, it's automatically parsed and registered
-3. **Automatic Unregistration**: When a tool file is removed, it's automatically unregistered
-4. **No Code Changes Required**: Tools are discovered and integrated without modifying agent code
-5. **Frontend UI**: React dashboard provides checkboxes/selectable boxes to enable/disable tools
-6. **Page Navigation**: Multi-page interface for tools, memory, and configuration management
+### Data Flow
 
-**Benefits:**
+A.R.T.E.M.I.S. follows a clear pipeline: **Load → Chunk → Index → Retrieve**
 
-- ✅ Most reliable approach - tools defined as documentation, not code
-- ✅ Hot-reload capability - add/remove tools without restarting
-- ✅ Version control friendly - tool definitions are files, not database entries
-- ✅ Easy integration - just drop YAML/OpenAPI files in the tools directory
+For detailed architecture information, see [ARCHITECTURE_FLOW.md](docs/ARCHITECTURE_FLOW.md).
 
 ### Tech Stack
 
@@ -178,659 +590,29 @@ The tool registry uses a **documentation-driven approach** for maximum reliabili
 
 ---
 
-## 📦 Installation & Setup
+## 📊 Project Status
 
-### Option 1: From Source
+### Current Phase: MVP (Phase 1)
 
-```bash
-git clone https://github.com/Anshumanv28/ARTEMIS.git
-cd ARTEMIS
-pip install -e .
-```
+**What's Working:**
 
-### Option 2: Docker (Coming Soon)
+- ✅ RAG pipeline (ingestion, chunking, indexing, retrieval)
+- ✅ Multiple file type support (CSV, PDF, DOCX, MD, TEXT)
+- ✅ CSV schema converters (RESTAURANT, TRAVEL)
+- ✅ Multiple chunking strategies
+- ✅ Semantic search
+- ✅ Extensible architecture with registry pattern
+- ✅ LangGraph agent (planner–tool loop, RAG via tools, multi-collection)
+- 🔄 Multimodal inputs
+- 🔄 Advanced memory management
 
-```bash
-docker-compose up
-```
+**Planned:**
 
-### Configuration
+- 📅 Dynamic tool registry
+- 📅 Frontend dashboard
+- 📅 Custom LLM fine-tuning
 
-Create a `.env` file:
-
-```env
-GROQ_API_KEY=your-groq-api-key
-QDRANT_URL=your-qdrant-url
-QDRANT_API_KEY=your-qdrant-api-key
-LIVEKIT_URL=your-livekit-url  # Optional
-LIVEKIT_API_KEY=your-livekit-api-key  # Optional
-```
-
----
-
-## 🔧 Dynamic Tool Registry
-
-A.R.T.E.M.I.S. uses a **documentation-driven tool registry** - the most reliable approach for dynamic tool management.
-
-### How It Works
-
-1. **File-Based Discovery**: Tools are defined as YAML or OpenAPI specification files in the `tools/` directory
-2. **Automatic Registration**: Backend file watcher automatically detects new tool files and registers them
-3. **Automatic Unregistration**: Removing a tool file automatically unregisters it from the agent
-4. **No Code Changes**: Add or remove tools without modifying any Python code
-5. **Frontend Control**: React dashboard provides UI to enable/disable registered tools
-
-### Backend Implementation
-
-```python
-# tools/weather_api.yaml
-name: get_weather
-description: Get current weather for a location
-endpoint: https://api.weather.com/v1/current
-method: GET
-parameters:
-  - name: location
-    type: string
-    required: true
-    description: City name or coordinates
-
-# Backend automatically:
-# 1. Watches tools/ directory
-# 2. Parses YAML/OpenAPI files
-# 3. Registers tools with LangChain
-# 4. Makes them available to the agent
-```
-
-### Frontend Features
-
-- **Tool Selection UI**: Checkboxes or selectable boxes to enable/disable tools
-- **Multi-Page Navigation**: Separate pages for tools, memory, and configuration
-- **Real-Time Updates**: UI reflects tool registration/unregistration in real-time
-- **Tool Status**: Visual indicators for active/inactive tools
-
-**Why Documentation-Driven?**
-
-- ✅ Most reliable - tools are version-controlled files
-- ✅ Hot-reload - no restart required
-- ✅ Easy integration - just drop files in directory
-- ✅ Standard formats - YAML/OpenAPI are well-documented
-- ✅ Frontend flexibility - UI can enable/disable without backend changes
-
----
-
-## 🔌 Document Converters
-
-A.R.T.E.M.I.S. provides flexible document conversion with three levels of control: auto-detect (zero config), built-in schemas, and custom schemas.
-
-### 1. Auto-Detect Mode (Zero Config)
-
-Works with any CSV - automatically uses all column headers:
-
-```python
-from artemis.rag import csv_to_documents
-
-# Works with any CSV structure - auto-detects headers (in-memory, default)
-docs, metadata = csv_to_documents("any_file.csv")
-```
-
-**What it does:**
-
-- Takes all columns from your CSV
-- Uses column names as labels
-- Produces documents like: `"CustomerID: 123. City: Delhi. Plan: Premium. ..."`
-- Returns in-memory lists (fast, simple)
-- Perfect for quick experiments, no configuration needed
-
-### 2. Built-in Schemas (Optimized)
-
-Use the pre-built RESTAURANT schema for optimized restaurant data:
-
-```python
-from artemis.rag import csv_to_documents, DocumentSchema
-
-# Uses optimized restaurant converter with proper field handling
-docs, metadata = csv_to_documents("restaurants.csv", DocumentSchema.RESTAURANT)
-```
-
-The RESTAURANT schema includes:
-
-- Smart field normalization (Yes/No handling)
-- Location string formatting
-- Rating and cost formatting
-- Optimized metadata for filtering
-
-### 3. Custom Schemas (Full Control)
-
-Define your own schema converter to control exactly which columns are used, how they're labeled, and how documents are formatted:
-
-```python
-from artemis.rag.core.document_converter import register_schema, DocumentSchema, csv_to_documents, format_doc
-import pandas as pd
-
-# Define your custom schema
-class MySchema(DocumentSchema):
-    CUSTOMER = "customer"
-
-@register_schema(MySchema.CUSTOMER)
-def convert_customers(csv_path: str):
-    """Custom converter with selected columns and formatting."""
-    df = pd.read_csv(csv_path)
-    docs, metadata = [], []
-
-    for _, row in df.iterrows():
-        # Pick only the columns you want
-        # Control labels and phrasing
-        doc_parts = {
-            "Customer": str(row.get("name", "")).strip(),
-            "City": str(row.get("city", "")).strip(),
-            "Plan": str(row.get("plan", "")).strip(),
-        }
-        doc = format_doc(doc_parts)
-        docs.append(doc)
-
-        # Build whatever metadata you need for filtering
-        metadata.append({
-            "id": row.get("id"),
-            "city": row.get("city"),
-            "plan": row.get("plan")
-        })
-
-    return docs, metadata
-
-# Use your custom schema
-docs, meta = csv_to_documents("customers.csv", MySchema.CUSTOMER)
-```
-
-**What you control:**
-
-- ✅ **Which columns** to include (skip irrelevant ones)
-- ✅ **How to label** them (custom field names)
-- ✅ **How to format** (combine fields, add context)
-- ✅ **Metadata structure** (what to store for filtering)
-
-### When to Use Each Approach
-
-| Approach            | Use When                                                           | Example                                                          |
-| ------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| **Auto-detect**     | Quick experiments, unknown CSV structure                           | `csv_to_documents("data.csv")`                                   |
-| **Built-in schema** | Using restaurant data                                              | `csv_to_documents("restaurants.csv", DocumentSchema.RESTAURANT)` |
-| **Custom schema**   | Need specific columns, custom formatting, or domain-specific logic | Register your own converter                                      |
-
-### Advanced: File-Based Storage (For Testing/Large Datasets)
-
-By default, documents are returned **in-memory** (fast and simple). For unit testing or very large datasets, you can save documents to files:
-
-```python
-# File-based mode (saves to artemis_data/docs/ folder)
-doc_paths, metadata_path = csv_to_documents("data.csv", save_to_disk=True)
-
-# Files are automatically deleted after ingestion by retriever
-retriever.add_documents(doc_paths, metadata_path)
-```
-
-**Or set via environment variable:**
-
-```bash
-# In .env file or export
-ARTEMIS_SAVE_DOCS_TO_DISK=true
-```
-
-**When to use file-based mode:**
-
-- Unit testing (can inspect files before ingestion)
-- Very large datasets (avoids memory issues)
-- Debugging (files remain if ingestion fails)
-
-**Default:** In-memory mode (faster for small/medium datasets)
-
-**Note:** Generated files are stored in `artemis_data/docs/` and logs in `artemis_data/logs/`. These folders are automatically created and ignored by Git.
-
-### The format_doc Helper
-
-All converters use the `format_doc()` helper for consistent formatting:
-
-```python
-from artemis.rag import format_doc
-
-doc_parts = {
-    "Product": "Laptop",
-    "Price": "$999",
-    "In Stock": "Yes",
-}
-
-document = format_doc(doc_parts)
-# Returns: "Product: Laptop. Price: $999. In Stock: Yes."
-```
-
-**Note:** Auto-detect works great for MVP and quick experiments. Custom schemas give you full control when you need optimized document quality for production use.
-
----
-
-## 🔍 Retrieval System
-
-A.R.T.E.M.I.S. uses a **modular retrieval architecture** with separated indexing and retrieval components, enabling extensible search strategies via a registry pattern.
-
-### Architecture Overview
-
-The retrieval system is split into two main components:
-
-1. **`Indexer`** - Handles document storage, embedding generation, and Qdrant operations
-2. **`Retriever`** - Handles document retrieval using registered search strategies
-
-This separation enables:
-
-- Independent testing of indexing and retrieval
-- Shared resources between components
-- Extensible search strategies via decorator registration
-
-### File Ingestion Pipeline
-
-A.R.T.E.M.I.S. uses a **unified ingestion pipeline** that processes all file types through three main stages: **Loaders → Converters (CSV only) → Chunkers → Indexer**.
-
-#### Pipeline Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Ingestion Pipeline                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  File → Loader → Converter* → Chunker → Indexer             │
-│           │           │          │                           │
-│           │           │          └─── Unified Interface      │
-│           │           └─── CSV Only                          │
-│           └─── Format-Specific                              │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-
-* Converter step only applies to CSV files
-```
-
-#### Pipeline Components
-
-**1. Loaders** (`artemis/rag/ingestion/loaders/`)
-
-- **Purpose**: Extract raw content from files (format-specific file reading)
-- **What they do**: Read files and return raw data structures
-- **Supported Formats**:
-  - `load_csv(path)` → Returns `pandas.DataFrame`
-  - `load_pdf_text(path)` → Returns `str` (extracted text)
-  - `load_docx_text(path)` → Returns `str` (paragraph text)
-  - `load_md_text(path)` → Returns `str` (markdown content)
-  - `load_text(path)` → Returns `str` (plain text)
-- **Role**: Step 1 - File reading/extraction (format-aware, content-agnostic)
-
-**2. Converters** (`artemis/rag/ingestion/converters/`)
-
-- **Purpose**: Convert structured CSV data to formatted text documents (CSV-only infrastructure)
-- **What they do**: Transform CSV DataFrames → formatted document strings with schema-aware formatting
-- **Key Components**:
-  - `DocumentSchema` enum (RESTAURANT, TRAVEL, SUPPORT)
-  - `CSV_CONVERTERS` registry for schema-specific converters
-  - `register_csv_schema()` decorator
-  - `format_doc()` utility for document formatting
-  - `csv_to_documents()` main conversion function
-- **Role**: Step 1.5 - CSV-specific data transformation (only for CSV files)
-- **Note**: Other file types (PDF, DOCX, MD, TEXT) skip this step - their loaders already produce text
-
-**3. Chunkers** (`artemis/rag/ingestion/chunkers/`)
-
-- **Purpose**: Split content into chunks suitable for embedding and retrieval (unified interface for all file types)
-- **What they do**: Take raw content (DataFrame for CSV, text for others) → Return lists of documents + metadata
-- **All file types use chunkers** - they provide the unified interface
-- **Available Strategies**:
-  - **`CSV_ROW`** ✅ - Row-based chunking for CSV files (default for CSV)
-  - **`FIXED`** ✅ - Fixed-size chunks without overlap
-  - **`FIXED_OVERLAP`** ✅ - Fixed-size chunks with overlap (default for PDF/DOCX/TEXT)
-  - **`SEMANTIC`** ✅ - Sentence/paragraph-aware chunking (default for Markdown)
-  - **`AGENTIC`** ⚠️ - LLM-driven chunking (**Placeholder** - Phase 2, falls back to FIXED_OVERLAP)
-- **Role**: Step 2 - Content chunking (unified interface)
-
-**4. Indexer** (`artemis/rag/core/indexer.py`)
-
-- **Purpose**: Store chunked documents in vector database
-- **What they do**: Generate embeddings and store in Qdrant
-- **Role**: Step 3 - Document storage
-
-#### Pipeline Flow by File Type
-
-**CSV Files:**
-
-```
-CSV File → load_csv() → DataFrame
-       → csv_row_chunker() → Formatted Documents + Metadata → Indexer
-       (chunker handles conversion internally using converters/schemas)
-```
-
-**PDF/DOCX/TEXT Files:**
-
-```
-File → load_pdf_text() / load_docx_text() / load_text() → Text String
-   → FIXED_OVERLAP Chunker → Documents + Metadata → Indexer
-   (no converter needed - text goes directly to chunker)
-```
-
-**Markdown Files:**
-
-```
-MD File → load_md_text() → Text String
-      → SEMANTIC Chunker → Documents + Metadata → Indexer
-      (no converter needed - text goes directly to chunker)
-```
-
-#### Default Strategy Mapping
-
-```python
-DEFAULT_CHUNK_FOR_FILETYPE = {
-    FileType.CSV: ChunkStrategy.CSV_ROW,           # CSV-specific chunker
-    FileType.PDF: ChunkStrategy.FIXED_OVERLAP,     # Text chunker
-    FileType.DOCX: ChunkStrategy.FIXED_OVERLAP,    # Text chunker
-    FileType.MD: ChunkStrategy.SEMANTIC,           # Semantic chunker
-    FileType.TEXT: ChunkStrategy.FIXED_OVERLAP,    # Text chunker
-}
-```
-
-**Key Insight**: All file types use chunkers as the unified interface. The CSV chunker is special because it combines conversion + chunking in one step. Other chunkers only chunk text since their loaders already produce text.
-
-#### Basic File Ingestion
-
-```python
-from artemis.rag import Indexer, FileType, ingest_file
-
-# Create indexer
-indexer = Indexer(collection_name="documents")
-
-# Simple usage with defaults
-ingest_file("document.pdf", FileType.PDF, indexer)
-
-# Override chunking strategy
-from artemis.rag import ChunkStrategy
-ingest_file("document.pdf", FileType.PDF, indexer,
-            chunk_strategy=ChunkStrategy.SEMANTIC)
-
-# With chunker parameters
-ingest_file("document.txt", FileType.TEXT, indexer,
-            chunk_size=1500, overlap=300)
-
-# CSV with schema
-from artemis.rag import DocumentSchema
-ingest_file("restaurants.csv", FileType.CSV, indexer,
-            schema=DocumentSchema.RESTAURANT)
-```
-
-#### Convenience Functions
-
-```python
-from artemis.rag import ingest_csv, ingest_pdf, ingest_docx, ingest_md, ingest_text
-
-# Convenience functions for each file type
-ingest_csv("data.csv", indexer, schema=DocumentSchema.RESTAURANT)
-ingest_pdf("manual.pdf", indexer, chunk_size=1000, overlap=200)
-ingest_docx("report.docx", indexer)
-ingest_md("readme.md", indexer)
-ingest_text("notes.txt", indexer)
-```
-
-#### Component Status
-
-**Fully Implemented:**
-
-- ✅ All Loaders (CSV, PDF, DOCX, MD, TEXT)
-- ✅ CSV Converter infrastructure (DocumentSchema, registry, format_doc)
-- ✅ CSV Schema Converters (RESTAURANT, TRAVEL)
-- ✅ Chunking Strategies (CSV_ROW, FIXED, FIXED_OVERLAP, SEMANTIC)
-- ✅ Semantic Retrieval Strategy
-
-**Placeholders (Phase 2):**
-
-- ⚠️ **Agentic Chunker** - Falls back to FIXED_OVERLAP chunking (LLM-driven chunking not yet implemented)
-- ⚠️ **Keyword Search Strategy** - Raises NotImplementedError (BM25/TF-IDF not yet implemented)
-- ⚠️ **Hybrid Search Strategy** - Raises NotImplementedError (semantic + keyword combination not yet implemented)
-- 🔜 **SUPPORT Schema Converter** - Not yet implemented
-
-#### Extending with Custom Chunkers
-
-You can register custom chunking strategies using the `@register_chunker` decorator:
-
-```python
-from artemis.rag.ingestion.chunkers.registry import register_chunker, ChunkStrategy
-
-@register_chunker(ChunkStrategy("custom_manual"))
-def my_custom_chunker(text: str, **kwargs) -> Tuple[List[str], List[Dict]]:
-    """
-    Custom chunking logic.
-
-    Args:
-        text: Input text to chunk
-        **kwargs: Additional parameters
-
-    Returns:
-        Tuple of (documents, metadata)
-    """
-    # Your custom chunking logic here
-    documents = []
-    metadata = []
-    # ... implementation ...
-    return documents, metadata
-
-# Use your custom chunker
-ingest_file("manual.pdf", FileType.PDF, indexer,
-            chunk_strategy=ChunkStrategy("custom_manual"))
-```
-
-### Basic Usage
-
-```python
-from artemis.rag import Indexer, Retriever, RetrievalMode
-
-# Option 1: Separate indexing and retrieval (recommended)
-indexer = Indexer(collection_name="restaurants")
-indexer.add_documents(docs, metadata)
-
-retriever = Retriever(
-    mode=RetrievalMode.SEMANTIC,
-    indexer=indexer  # Share resources
-)
-results = retriever.retrieve("Italian restaurants", k=5)
-
-# Option 2: Retriever with explicit embedder (for retrieval-only use)
-from artemis.rag import Embedder
-embedder = Embedder()  # Uses default model, or Embedder(model_name="...")
-retriever = Retriever(mode=RetrievalMode.SEMANTIC, embedder=embedder)
-results = retriever.retrieve("Italian restaurants", k=5)
-
-# Note: For adding documents, use Indexer. Retriever.add_documents() is for
-# backward compatibility only - it creates an Indexer internally.
-```
-
-### Retrieval Modes
-
-A.R.T.E.M.I.S. supports multiple retrieval modes:
-
-- **`SEMANTIC`** (MVP) - Semantic vector search using embeddings
-- **`KEYWORD`** (Coming Soon) - BM25/TF-IDF keyword-based search
-- **`HYBRID`** (Coming Soon) - Combined semantic + keyword search
-
-### Extending with Custom Retrieval Strategies
-
-You can register custom retrieval strategies using the `@register_strategy` decorator. Strategies are organized in the `artemis/rag/strategies/` folder, similar to document converters.
-
-#### Built-in Strategies
-
-- **`semantic.py`** ✅ - Semantic vector search (MVP, fully implemented)
-- **`keyword.py`** ⚠️ - Keyword search (**Placeholder** - Phase 2, raises NotImplementedError)
-- **`hybrid.py`** ⚠️ - Hybrid search (**Placeholder** - Phase 2, raises NotImplementedError)
-
-#### Creating a Custom Strategy
-
-1. **Create a new strategy file** in `artemis/rag/strategies/`:
-
-```python
-# artemis/rag/strategies/my_custom_strategy.py
-from typing import List, Dict, Any
-from artemis.rag.core.retriever import register_strategy, RetrievalMode, Retriever
-from artemis.utils import get_logger
-
-logger = get_logger(__name__)
-
-@register_strategy(RetrievalMode.KEYWORD)  # Or create a new RetrievalMode
-def my_custom_keyword_search(retriever: Retriever, query: str, k: int) -> List[Dict[str, Any]]:
-    """
-    Custom keyword search implementation.
-
-    Args:
-        retriever: Retriever instance (provides access to qdrant_client, etc.)
-        query: Search query string
-        k: Number of results to return
-
-    Returns:
-        List of dictionaries with 'text', 'score', and 'metadata' keys
-    """
-    # Your custom BM25 or keyword search logic here
-    # Access retriever.qdrant_client, retriever.collection_name, etc.
-    results = []
-    # ... implementation ...
-    return results
-```
-
-2. **Import it in `artemis/rag/strategies/__init__.py`**:
-
-```python
-# artemis/rag/strategies/__init__.py
-try:
-    from artemis.rag.strategies.my_custom_strategy import my_custom_keyword_search
-except ImportError:
-    pass
-```
-
-3. **Use your custom strategy**:
-
-```python
-from artemis.rag import Retriever, RetrievalMode
-
-retriever = Retriever(mode=RetrievalMode.KEYWORD)
-results = retriever.retrieve("Italian food", k=5)
-```
-
-**Note:** See `artemis/rag/strategies/example_custom.py` for a complete example template.
-
-### Why Multiple Search Strategies?
-
-Different retrieval modes excel in different scenarios:
-
-- **Semantic Search**: Best for natural-language, fuzzy queries (e.g., "restaurants with good ambiance")
-- **Keyword Search**: Best when exact terms matter (e.g., API names, IDs, legal citations)
-- **Hybrid Search**: Combines both for improved relevance and robustness
-
-This design makes A.R.T.E.M.I.S. suitable for diverse use cases:
-
-- **Dev Assistant** → Keyword/hybrid for exact API names
-- **Legal/Compliance Bot** → BM25/hybrid for precise citations
-- **Enterprise Search** → Hybrid for varied query types
-
----
-
-## 🎓 Examples
-
-### Example 1: Restaurant Assistant
-
-```python
-from artemis import Agent
-
-# Initialize with restaurant data
-# Note: Uses Kaggle restaurant dataset (see Acknowledgments section)
-agent = Agent(
-    data_path="./data/restaurants/",
-    use_case="restaurant"
-)
-
-# Natural conversation
-response = agent.chat("I'm craving Italian food. Any recommendations?")
-# Agent retrieves relevant restaurant data and responds contextually
-```
-
-### Example 2: Adding Custom Tools (Documentation-Driven)
-
-```python
-# Tools are automatically discovered from documentation files
-# Backend watches for YAML/OpenAPI files and registers/unregisters dynamically
-
-# Option 1: YAML tool definition
-# tools/weather.yaml
-name: get_weather
-description: Get current weather for a location
-endpoint: https://api.weather.com/v1/current
-method: GET
-parameters:
-  - name: location
-    type: string
-    required: true
-
-# Option 2: OpenAPI spec
-# tools/api_spec.yaml (OpenAPI 3.0 format)
-# The registry automatically parses and registers all endpoints
-
-# Tools are automatically available once files are added to the tools directory
-agent.chat("What's the weather in New York?")
-# Agent automatically uses the registered weather tool
-```
-
-### Example 2b: Frontend Tool Management
-
-```typescript
-// React Dashboard - Tool Selection UI
-// Users can enable/disable tools via checkboxes or selectable boxes
-<ToolSelector>
-  <CheckboxTool name="weather_api" enabled={true} />
-  <CheckboxTool name="calendar_api" enabled={false} />
-  <CheckboxTool name="payment_api" enabled={true} />
-</ToolSelector>
-
-// Navigation between different pages (later stages)
-<Navigation>
-  <Page name="tools" />
-  <Page name="memory" />
-  <Page name="configuration" />
-</Navigation>
-```
-
-### Example 3: Multi-Use Case Switching
-
-```python
-# Start with restaurant data
-agent = Agent(data_path="./data/restaurants/", use_case="restaurant")
-agent.chat("Find me a pizza place")
-
-# Switch to travel domain
-agent.adapt_to_new_use_case(
-    data_path="./data/travel/",
-    use_case="travel"
-)
-agent.chat("Plan a trip to Tokyo")
-```
-
----
-
-## 🛠️ Development
-
-### Running Tests
-
-```bash
-pytest tests/
-```
-
-### Running the Dashboard
-
-```bash
-cd frontend
-npm install
-npm start
-```
-
-### Building Documentation
-
-```bash
-mkdocs serve
-```
+See the [Documentation](#-documentation) section and [docs/README.md](docs/README.md) for more.
 
 ---
 
@@ -841,7 +623,8 @@ mkdocs serve
 **Core 4 Features - Available Now:**
 
 - [x] **Adaptive RAG** - DSPy-optimized retrieval (90%+ recall)
-- [x] **Agent Orchestration** - LangGraph multi-step planning
+- [x] **File Ingestion** - Multiple file types and chunking strategies
+- [x] **Agent Orchestration** - LangGraph planner–tool loop (RAG via tools, multi-collection)
 - [ ] **Multimodal Inputs** - Text, voice (LiveKit), vision
 - [ ] **Semantic Memory** - Short-term conversation context
 
@@ -860,54 +643,61 @@ mkdocs serve
 - [ ] **SDK Distribution** - Python package distribution
 - [ ] **Monetized SDK Tier** - Paid tier with premium features
 
-See [ROADMAP.md](./ROADMAP.md) for detailed progress.
+See [Documentation](#-documentation) for current docs.
 
 ---
 
-## 🤝 Contributing
+## 📞 Get in Touch
 
-We welcome contributions! A.R.T.E.M.I.S. is built for the community.
+We'd love to hear from you! Here are the best ways to reach us:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Community
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+- **GitHub Issues** - [Report bugs or request features](https://github.com/Anshumanv28/ARTEMIS/issues)
+- **GitHub Discussions** - [Join the community](https://github.com/Anshumanv28/ARTEMIS/discussions)
+- **GitHub Repository** - [View the code](https://github.com/Anshumanv28/ARTEMIS)
+
+### Contributing
+
+- **Pull Requests** - We welcome contributions! See [For Contributors](#-for-contributors) section
+- **Feature Requests** - Open an issue with the `enhancement` label
+- **Bug Reports** - Open an issue with the `bug` label
+
+### Documentation
+
+- **Full Documentation** - [docs/](docs/) directory and [docs/README.md](docs/README.md) index
+- **Agent Quick Start** - [docs/AGENT_QUICKSTART.md](docs/AGENT_QUICKSTART.md)
+
+---
+
+## 💬 Support & Community
+
+### Getting Help
+
+- **Documentation** - Check the [Documentation](#-documentation) section
+- **Examples** - See [Examples](#-examples) section
+- **GitHub Issues** - Search existing issues or create a new one
+- **GitHub Discussions** - Ask questions and share ideas
+
+### Community Guidelines
+
+- Be respectful and inclusive
+- Help others learn and grow
+- Share your use cases and examples
+- Report bugs and suggest improvements
+
+### Resources
+
+- **Documentation**: [docs/](docs/)
+- **Examples**: [examples/](examples/)
+- **Templates**: [examples/templates/](examples/templates/)
+- **Documentation index**: [docs/README.md](docs/README.md)
 
 ---
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
----
-
-## 🎯 Future: SDK Distribution
-
-A.R.T.E.M.I.S. will be distributed as a **Python SDK** for easy integration:
-
-```bash
-pip install artemis-sdk
-```
-
-**Planned SDK Features:**
-
-- One-line installation
-- Pre-configured templates for common use-cases
-- Cloud-hosted memory (optional)
-- Premium features (advanced memory, custom models)
-
-**Monetization**: Free tier for open-source use, paid tier for enterprise features.
-
----
-
-## 📞 Support & Community
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/Anshumanv28/ARTEMIS/issues)
-- **Discussions**: [Join the community](https://github.com/Anshumanv28/ARTEMIS/discussions)
-- **Documentation**: [Full docs](https://artemis.readthedocs.io) (coming soon)
 
 ---
 
