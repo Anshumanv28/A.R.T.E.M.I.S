@@ -6,7 +6,6 @@ import sys
 from typing import Optional
 
 from artemis.agent.config import AgentConfig
-from artemis.agent.context import load_system_context
 from artemis.agent.graph import AgentGraph
 from artemis.agent.supervisor import Supervisor
 from artemis.agent.tools import ToolRegistry, build_rag_registry
@@ -66,6 +65,10 @@ def _build_registry_v2(
                 llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
         except Exception as e:
             logger.debug("Could not create LLM client for agentic chunking: %s", e)
+        if llm_client_for_agentic is None:
+            logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
+        else:
+            logger.info("Agentic chunking is available (LLM client configured).")
         return build_rag_registry(
             retriever=None,
             indexer=None,
@@ -120,6 +123,10 @@ def _build_registry_v2(
             llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
     except Exception as e:
         logger.debug("Could not create LLM client for agentic chunking: %s", e)
+    if llm_client_for_agentic is None:
+        logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
+    else:
+        logger.info("Agentic chunking is available (LLM client configured).")
     return build_rag_registry(
         retriever,
         indexer=indexer,
@@ -208,6 +215,10 @@ def run_agent(
                     llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
             except Exception as e:
                 logger.debug("Could not create LLM client for agentic chunking: %s", e)
+            if llm_client_for_agentic is None:
+                logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
+            else:
+                logger.info("Agentic chunking is available (LLM client configured).")
             registry = build_rag_registry(
                 retriever=None,
                 indexer=None,
@@ -264,6 +275,10 @@ def run_agent(
                     llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
             except Exception as e:
                 logger.debug("Could not create LLM client for agentic chunking: %s", e)
+            if llm_client_for_agentic is None:
+                logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
+            else:
+                logger.info("Agentic chunking is available (LLM client configured).")
             registry = build_rag_registry(
                 retriever,
                 indexer=indexer,
@@ -297,11 +312,13 @@ def run_agent_v2(
     indexer=None,
     retriever=None,
     collection_name: str = "artemis_documents",
+    message_history: Optional[list] = None,
 ) -> dict:
     """
     Run the agent using the Supervisor + sub-agent architecture.
     Builds config and registry the same way as run_agent() when not provided.
     Pass a pre-built registry to reuse the RAG stack across multiple queries (e.g. interactive loop).
+    message_history: optional list of {"role": "user"|"assistant", "content": "..."} for multi-turn context.
     Loads system context from the registry, creates a Supervisor, and dispatches the query.
     Returns the final agent state as a dict (same shape as run_agent).
     """
@@ -315,13 +332,17 @@ def run_agent_v2(
     if registry is None:
         registry = _build_registry_v2(config, retriever, indexer, collection_name)
 
-    system_context = load_system_context(registry)
+    # Supervisor loads system_context (list_collections, get_collection_info) on first use.
     supervisor = Supervisor(
         config=config,
         registry=registry,
-        system_context=system_context,
+        system_context=None,
     )
-    result = supervisor.invoke(query)
+    result = supervisor.invoke(
+        query,
+        message_history=message_history,
+        last_routed_to=None,
+    )
     return dict(result)
 
 
@@ -404,10 +425,20 @@ def main():
             print(f"Mode: single collection (all ingest and search): {args.collection}")
         print("\nEnter queries (or 'quit' to exit):\n")
 
-        # For v2, build registry once so we don't rebuild Embedder/Indexers/Retrievers per query
-        v2_registry = None
+        # For v2, build registry and Supervisor once; context and sub-agents load on first use.
+        v2_supervisor = None
         if args.v2:
             v2_registry = _build_registry_v2(config, retriever, indexer, args.collection)
+            v2_supervisor = Supervisor(
+                config=config,
+                registry=v2_registry,
+                system_context=None,
+            )
+
+        # Keep last 6 messages (3 exchanges) for multi-turn context in v2
+        conversation_history: list = []
+        max_history_messages = 6
+        last_routed_to: Optional[str] = None
 
         while True:
             try:
@@ -419,7 +450,13 @@ def main():
                     continue
 
                 if args.v2:
-                    result = run_agent_v2(query, registry=v2_registry, config=config)
+                    result = v2_supervisor.invoke(
+                        query,
+                        message_history=conversation_history[-max_history_messages:] if conversation_history else None,
+                        last_routed_to=last_routed_to,
+                    )
+                    result = dict(result)
+                    last_routed_to = result.get("routed_to")
                 else:
                     result = run_agent(query, retriever=retriever, indexer=indexer, config=config)
 
@@ -439,6 +476,16 @@ def main():
                 if result.get("error"):
                     print(f"\nError: {result['error']}")
 
+                # Append this turn to conversation history for next query (v2 only)
+                if args.v2:
+                    conversation_history.append({"role": "user", "content": query})
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": result.get("final_answer") or "",
+                    })
+                    if len(conversation_history) > max_history_messages:
+                        conversation_history = conversation_history[-max_history_messages:]
+
                 print("\n" + "=" * 70 + "\n")
 
             except KeyboardInterrupt:
@@ -450,8 +497,16 @@ def main():
 
     else:
         try:
+            # Build registry up front for single-shot so Embedder/Indexers/Retrievers
+            # initialize before we process the query (logs show init first, not mid-query).
+            single_shot_registry = None
             if args.v2:
-                result = run_agent_v2(args.query, retriever=retriever, indexer=indexer, config=config)
+                single_shot_registry = _build_registry_v2(config, retriever, indexer, args.collection)
+                result = run_agent_v2(
+                    args.query,
+                    registry=single_shot_registry,
+                    config=config,
+                )
             else:
                 result = run_agent(
                     args.query,

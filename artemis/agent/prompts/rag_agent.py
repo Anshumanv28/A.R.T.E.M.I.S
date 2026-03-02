@@ -65,7 +65,7 @@ class RAGSearchPrompt(BasePrompt):
         lines.append("")
         lines.append("Rules:")
         lines.append("1. For questions about 'ingested content', 'main topic', 'what documents are there', or 'summarize'—call search_documents first; do NOT answer direct without search results.")
-        lines.append("2. Call search_documents with the most relevant collection_name for the query")
+        lines.append("2. Call list_collections to see available collections; then call search_documents with collection_name set to one of those names (system-docs collection for system questions, user-data collection for user content)")
         lines.append(
             '3. After ONE successful search that returned results, use intent="direct" to synthesize — never call search_documents again in the same session'
         )

@@ -2,7 +2,7 @@
 Sub-agent graph: reusable ReAct sub-agent with BasePrompt and filtered registry.
 """
 
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from langgraph.graph import StateGraph, END
 
@@ -137,10 +137,11 @@ class SubAgentGraph:
             return "direct_answer"
         return "planner"
 
-    def invoke(self, query: str) -> AgentState:
-        """Run the sub-agent with a query."""
+    def invoke(self, query: str, message_history: Optional[list] = None) -> AgentState:
+        """Run the sub-agent with a query and optional conversation history."""
         initial_state: AgentState = {
             "query": query,
+            "message_history": message_history,
             "intent": "direct",
             "confidence": 0.0,
             "tool_name": None,
@@ -157,10 +158,11 @@ class SubAgentGraph:
         logger.info("Sub-agent execution completed")
         return result
 
-    async def ainvoke(self, query: str) -> AgentState:
+    async def ainvoke(self, query: str, message_history: Optional[list] = None) -> AgentState:
         """Async version of invoke."""
         initial_state: AgentState = {
             "query": query,
+            "message_history": message_history,
             "intent": "direct",
             "confidence": 0.0,
             "tool_name": None,

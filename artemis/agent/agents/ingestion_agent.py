@@ -9,6 +9,7 @@ from artemis.agent.agents.base import SubAgentGraph, _filter_registry
 from artemis.agent.prompts.ingestion_agent import IngestionPrompt
 
 INGESTION_AGENT_TOOLS = [
+    "list_directory",
     "suggest_ingest_options",
     "ingest_file",
     "ingest_directory",

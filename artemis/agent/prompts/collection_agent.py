@@ -60,11 +60,15 @@ class CollectionManagementPrompt(BasePrompt):
         lines.append("")
         lines.append("Rules:")
         lines.append(
-            '1. For clear_collection or delete_collection: only set confirm=True if the user has explicitly said "yes", "confirm", "go ahead", "delete it", or equivalent in their message. If not explicit, use intent="direct" to ask for confirmation first.'
+            '1. For create_collection pass collection_name (any valid name). Common choices: artemis_system_docs for system/docs, artemis_user_docs for user data; or choose a name the user asked for. Optionally pass purpose so we remember what the collection is for in later runs. Never pass an empty collection_name.'
         )
-        lines.append("2. Never infer confirmation. Explicit = user used a confirmation word in this exact query.")
-        lines.append("3. Use get_collection_info to check state before any destructive operation")
-        lines.append(f"4. You have at most {max_tool_steps} tool calls")
+        lines.append(
+            '2. For clear_collection or delete_collection: only set confirm=True if the user has explicitly said "yes", "confirm", "go ahead", "delete it", or equivalent in their message. If not explicit, use intent="direct" to ask for confirmation first.'
+        )
+        lines.append("3. Never infer confirmation. Explicit = user used a confirmation word in this exact query.")
+        lines.append("4. Use get_collection_info to check state before any destructive operation")
+        lines.append("5. After creating a collection, state what was created and its purpose (from the tool result) so the user has a record; the purpose is stored for later runs.")
+        lines.append(f"6. You have at most {max_tool_steps} tool calls")
         lines.append("")
         lines.append(JSON_FORMAT_LINE)
         return "\n".join(lines)

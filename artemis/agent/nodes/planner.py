@@ -20,6 +20,26 @@ from artemis.utils import get_logger
 
 logger = get_logger(__name__)
 
+# Max conversation turns to include in context (2 exchanges = 4 messages)
+_MAX_MESSAGE_HISTORY = 4
+_MAX_ASSISTANT_CHARS = 400
+
+
+def _format_message_history(history: Optional[List[Dict[str, Any]]]) -> str:
+    """Format message_history for prompt context. Uses last N messages, truncates long assistant replies."""
+    if not history:
+        return ""
+    take = history[-_MAX_MESSAGE_HISTORY:]
+    lines = []
+    for m in take:
+        role = (m.get("role") or "user").lower()
+        content = (m.get("content") or "").strip()
+        if role == "assistant" and len(content) > _MAX_ASSISTANT_CHARS:
+            content = content[:_MAX_ASSISTANT_CHARS].rstrip() + "..."
+        lines.append(f"{role.capitalize()}: {content}")
+    return "Recent conversation:\n" + "\n".join(lines) + "\n\n"
+
+
 # Strict schema for planner output: intent required; tool_name and tool_args when intent is "tool"
 PLANNER_RESPONSE_SCHEMA = {
     "type": "object",
@@ -196,9 +216,9 @@ def planner_node(
     else:
         # Multi-collection: agent must choose collection by task via collection_name in tool calls
         current_collection_line = (
-            'You can use multiple collections. Always pass "collection_name" when calling search_documents, ingest_file, or ingest_directory. '
-            'Use artemis_system_docs when the task is about the system itself: how the system works, RAG options, documentation, or planning decisions. '
-            'Use artemis_user_docs for user data, ingested content, and any other task (default). When the user asks which collection is in use, explain that you choose by task: system docs vs user data.'
+            'You can use multiple collections. Call list_collections to see available collection names; then pass "collection_name" when calling search_documents, ingest_file, or ingest_directory using one of those names. '
+            'Use the collection that holds system documentation when the task is about the system itself (how the system works, RAG options, documentation, or planning). '
+            'Use the collection for user data for user content, ingested files, and any other task (default). When the user asks which collection is in use, explain that you choose by task: system docs vs user data.'
         )
 
     if system_prompt_override is not None:
@@ -221,12 +241,21 @@ def planner_node(
             name = tc.get("tool_name", "?")
             line = f"  {i}. {name}: {status}"
             result = tc.get("result")
-            if ok and isinstance(result, dict) and name == "ingest_directory":
-                ingested = result.get("ingested_count")
-                if ingested is not None:
-                    line += f", ingested_count={ingested}"
+            if ok and isinstance(result, dict):
+                if name == "ingest_directory":
+                    ingested = result.get("ingested_count")
+                    if ingested is not None:
+                        line += f", ingested_count={ingested}"
+                elif name == "create_collection":
+                    cname = result.get("collection_name")
+                    purpose = result.get("purpose")
+                    if cname:
+                        line += f", collection_name={cname}"
+                    if purpose:
+                        line += f", purpose={purpose!r}"
             prior_context += line + "\n"
-    user_prompt = f"Query: {query}{prior_context}\n\nClassify intent and respond with JSON only."
+    conv_block = _format_message_history(state.get("message_history"))
+    user_prompt = f"{conv_block}Query: {query}{prior_context}\n\nClassify intent and respond with JSON only."
 
     if config.provider == "groq":
         llm_client = GroqClient(
@@ -272,12 +301,55 @@ def planner_node(
                         "reasoning": "Search already returned results; answering with available context.",
                     }
                     break
-        # Block duplicate ingest_directory for the same directory in this run
+        # Block repeated list_collections (one call is enough)
+        if validated.get("intent") == "tool" and validated.get("tool_name") == "list_collections":
+            for tc in tool_calls:
+                if tc.get("tool_name") == "list_collections" and tc.get("ok") and tc.get("result") is not None:
+                    # If we have list_collections but no search yet, and the user asked a content question, run search instead of direct
+                    has_search = any(t.get("tool_name") == "search_documents" for t in tool_calls)
+                    query = (state.get("query") or "").strip().lower()
+                    content_question = not has_search and (
+                        "tell me about" in query or "what is" in query or "how does" in query
+                        or "according to" in query or "based on the" in query or "what can you" in query
+                    )
+                    if content_question:
+                        res = tc.get("result")
+                        collections = res.get("collections", res) if isinstance(res, dict) else (res if isinstance(res, list) else [])
+                        coll = collections[0] if collections else "artemis_user_docs"
+                        logger.info(
+                            "Blocking repeated list_collections; forcing search_documents so RAG lookup runs"
+                        )
+                        validated = {
+                            **validated,
+                            "intent": "tool",
+                            "tool_name": "search_documents",
+                            "tool_args": {"query": state.get("query", ""), "collection_name": coll},
+                            "reasoning": "Collections already listed; running search_documents to retrieve document content for the answer.",
+                        }
+                    else:
+                        logger.info(
+                            "Blocking repeated list_collections; forcing intent=direct"
+                        )
+                        validated = {
+                            **validated,
+                            "intent": "direct",
+                            "tool_name": None,
+                            "tool_args": None,
+                            "reasoning": "Collections already listed; answer with available context.",
+                        }
+                    break
+        # Block duplicate ingest_directory only when the previous call actually succeeded (ingested_count > 0)
         if validated.get("intent") == "tool" and validated.get("tool_name") == "ingest_directory":
             new_args = validated.get("tool_args") or {}
             new_path = _normalize_path(new_args.get("directory_path") or "")
             for tc in tool_calls:
-                if tc.get("tool_name") != "ingest_directory" or not tc.get("ok"):
+                if tc.get("tool_name") != "ingest_directory":
+                    continue
+                prev_result = tc.get("result")
+                # Only treat as success: dict with ingested_count > 0 (wrapper returns list on collection error)
+                if isinstance(prev_result, dict) and prev_result.get("ingested_count", 0) > 0:
+                    pass
+                else:
                     continue
                 prev_args = tc.get("arguments") or {}
                 prev_path = _normalize_path(prev_args.get("directory_path") or "")

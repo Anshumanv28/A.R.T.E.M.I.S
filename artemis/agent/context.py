@@ -40,11 +40,13 @@ def load_system_context(registry: ToolRegistry) -> SystemContext:
 
     try:
         raw = registry.get("list_collections").callable()
-        if isinstance(raw, list):
+        if isinstance(raw, dict) and "collections" in raw:
+            collections = raw["collections"] if isinstance(raw["collections"], list) else []
+        elif isinstance(raw, list):
             collections = raw
         else:
             collections = []
-            logger.warning("list_collections did not return a list; using empty collections")
+            logger.warning("list_collections did not return a list or dict with 'collections'; using empty collections")
     except KeyError as e:
         logger.warning("list_collections not registered: %s", e)
     except Exception as e:

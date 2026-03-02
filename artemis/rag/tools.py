@@ -90,6 +90,13 @@ def create_rag_ingest_tool(
         llm_client: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Ingest a file into the knowledge base. Pass llm_client for agentic chunking."""
+        raw_path = (path or "").strip()
+        if raw_path in ("", "."):
+            return {
+                "ok": False,
+                "error": "path cannot be '.' or empty. Specify the file path (e.g. 'README.md').",
+                "path": path,
+            }
         path_obj = _resolve_path(path)
         if not path_obj.exists():
             return {"ok": False, "error": f"File not found: {path}"}
@@ -193,6 +200,13 @@ def create_rag_ingest_directory_tool(
         recursive: bool = False,
     ) -> Dict[str, Any]:
         """Ingest files in the directory with the given extension. By default only files directly in the directory are ingested (no subdirectories). Set recursive=True to include subdirectories. Pass llm_client for agentic chunking."""
+        raw = (directory_path or "").strip()
+        if raw in ("", "."):
+            return {
+                "ok": False,
+                "error": "directory_path cannot be '.' or empty. Specify the folder name the user asked for (e.g. 'docs' for the docs folder).",
+                "ingested_count": 0,
+            }
         dir_path = _resolve_path(directory_path)
         if not dir_path.exists():
             return {"ok": False, "error": f"Directory not found: {directory_path}", "ingested_count": 0}
@@ -224,10 +238,21 @@ def create_rag_ingest_directory_tool(
         if llm_client is not None:
             chunk_kwargs["llm_client"] = llm_client
         files = list(dir_path.rglob(pattern) if recursive else dir_path.glob(pattern))
+        # Skip files inside cache/hidden/version-control directories (e.g. .pytest_cache, __pycache__, .git)
+        _skip_dirs = {".pytest_cache", "__pycache__", ".git", "node_modules", ".venv", "venv", ".mypy_cache"}
+        def _should_skip(file_path: Path) -> bool:
+            try:
+                rel = file_path.relative_to(dir_path)
+                for part in rel.parts[:-1]:  # parent dirs only
+                    if part in _skip_dirs or (part.startswith(".") and part not in (".github",)):
+                        return True
+            except ValueError:
+                pass
+            return False
         ingested = 0
         errors = []
         for f in files:
-            if not f.is_file():
+            if not f.is_file() or _should_skip(f):
                 continue
             try:
                 ingest_file(
@@ -262,6 +287,89 @@ _EXT_TO_FILETYPE = {
     ".txt": "text",
 }
 _SUPPORTED_EXTENSIONS = set(_EXT_TO_FILETYPE.keys())
+
+# Directories to skip when listing (cache, venv, version control)
+_LIST_SKIP_DIRS = {".pytest_cache", "__pycache__", ".git", "node_modules", ".venv", "venv", ".mypy_cache"}
+
+
+def list_directory(
+    path: str = ".",
+    max_depth: int = 1,
+) -> Dict[str, Any]:
+    """
+    List directories and files at a given path. Use this to discover folder structure
+    so the user (or agent) can choose what to ingest or explore.
+
+    Args:
+        path: Directory path to list; use "." or "" for current working directory.
+        max_depth: How many levels to show (1 = only immediate children; 2 = children + grandchildren).
+
+    Returns:
+        dict with ok, path, resolved_path, directories (list of names), files (list of names),
+        and optionally subdirs (when max_depth > 1) with same shape. Hidden/cache dirs are skipped.
+    """
+    raw = (path or ".").strip() or "."
+    p = _resolve_path(raw)
+    if not p.exists():
+        return {
+            "ok": False,
+            "error": f"Path not found: {path}",
+            "path": path,
+        }
+    if not p.is_dir():
+        return {
+            "ok": False,
+            "error": f"Not a directory: {path}",
+            "path": path,
+        }
+
+    def _should_skip(name: str) -> bool:
+        if name in _LIST_SKIP_DIRS:
+            return True
+        if name.startswith(".") and name != ".github":
+            return True
+        return False
+
+    def _one_level(d: Path) -> Dict[str, Any]:
+        dirs: List[str] = []
+        files_list: List[str] = []
+        try:
+            for item in sorted(d.iterdir()):
+                if _should_skip(item.name):
+                    continue
+                if item.is_dir():
+                    dirs.append(item.name)
+                else:
+                    files_list.append(item.name)
+        except OSError as e:
+            return {"directories": [], "files": [], "error": str(e)}
+        return {"directories": dirs, "files": files_list}
+
+    out: Dict[str, Any] = {
+        "ok": True,
+        "path": path,
+        "resolved_path": str(p.resolve()),
+        "max_depth": max_depth,
+    }
+    level = _one_level(p)
+    out["directories"] = level.get("directories", [])
+    out["files"] = level.get("files", [])
+
+    if max_depth > 1:
+        subdirs_info: List[Dict[str, Any]] = []
+        for subname in out["directories"]:
+            subpath = p / subname
+            if not subpath.is_dir() or _should_skip(subname):
+                continue
+            sub_level = _one_level(subpath)
+            subdirs_info.append({
+                "name": subname,
+                "directories": sub_level.get("directories", []),
+                "files": sub_level.get("files", []),
+            })
+        out["subdirs"] = subdirs_info
+
+    return out
 
 
 def _resolve_path(path: str) -> Path:
@@ -492,6 +600,7 @@ __all__ = [
     "create_rag_ingest_tool",
     "create_rag_ingest_directory_tool",
     "suggest_ingest_options",
+    "list_directory",
     "list_collections_tool",
     "get_collection_info_tool",
     "create_collection_tool",
