@@ -82,6 +82,8 @@ python -m artemis.agent.run --v2
 python -m artemis.agent.run "What does the document say about X?" --v2
 ```
 
+Use `pip install -e .` from the repo root (recommended). The repo also contains a `requirements.txt` lockfile; it may include Windows-only packages and can fail on Linux — prefer `pip install -e .`.
+
 ---
 
 ## Configuration
@@ -142,7 +144,7 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 - **Health:** `GET /health`
 - **Query:** `POST /query`
 
-> Note: if you deploy without an Elastic IP, your instance public IP may change on stop/start.
+The demo is served over **HTTP** (no HTTPS). It is best-effort: the instance may be stopped or restarted, and the public IP can change without an Elastic IP, so the demo may be unavailable at times.
 
 ### Run with Docker
 
