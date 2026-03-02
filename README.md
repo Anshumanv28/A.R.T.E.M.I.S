@@ -135,6 +135,15 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 - **GET /health** — Returns 200 if the runtime and Qdrant are ready; 503 otherwise.
 - **POST /query** — Body: `{"query": "your question", "message_history": null}`. Optional `message_history` for multi-turn. Returns `{"final_answer", "routed_to", "error", "tool_calls"}`.
 
+### Live demo
+
+- **Demo base URL:** `http://54.87.62.83:8000`
+- **Swagger UI:** `http://54.87.62.83:8000/docs`
+- **Health:** `GET /health`
+- **Query:** `POST /query`
+
+> Note: if you deploy without an Elastic IP, your instance public IP may change on stop/start.
+
 ### Run with Docker
 
 The non-Docker way (install with pip, run `python -m artemis.api` or `python -m artemis.agent.run --v2`) is unchanged and remains the default for local development. To run in a container:
@@ -157,6 +166,17 @@ docker-compose up --build
 ```
 
 See [docs/DEPLOY_AWS_FREE.md](docs/DEPLOY_AWS_FREE.md) for deployment options.
+
+### Postman (collection + environments)
+
+Import the Postman assets in `postman/`:
+- **Collection:** `postman/ARTEMIS_API.postman_collection.json`
+- **Local env:** `postman/ARTEMIS.postman_environment.json`
+- **Demo env:** `postman/ARTEMIS_DEMO.postman_environment.json`
+
+See `postman/README.md` for import steps.
+
+Optional: hosted Postman docs (may change over time): [Postman workspace request docs](https://planetary-desert-315596.postman.co/workspace/My-Workspace~070a057c-0089-4b38-8434-707e445eb7b7/request/32894704-e64db534-5b65-4245-81f8-4624e7326966?action=share&creator=32894704&ctx=documentation&active-environment=32894704-b4ddc88a-8114-40eb-81f0-0ddee0104976)
 
 ### Run with legacy agent (v1)
 
