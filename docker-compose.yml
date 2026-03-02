@@ -1,0 +1,24 @@
+# ARTEMIS API (and optional local Qdrant for dev).
+# Provide env via .env or set GROQ_API_KEY/OPENAI_API_KEY, QDRANT_URL, QDRANT_API_KEY.
+# For production with Qdrant Cloud: run only the api service with QDRANT_* pointing to Cloud.
+# With --profile with-qdrant: also start local Qdrant. Set QDRANT_URL=http://qdrant:6333 and QDRANT_API_KEY= in .env so the API uses it.
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - ARTEMIS_API_PORT=8000
+    restart: unless-stopped
+
+  # Optional: local Qdrant for dev (omit if using Qdrant Cloud)
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    restart: unless-stopped
+    profiles:
+      - with-qdrant

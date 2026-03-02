@@ -117,6 +117,47 @@ print(result["final_answer"])
 print(f"Routed to: {result['routed_to']}")   # e.g. "rag_search"
 ```
 
+### Run the API
+
+Same config as the CLI (env vars). Start the HTTP server:
+
+```bash
+# Default port 8000; override with ARTEMIS_API_PORT
+python -m artemis.api
+```
+
+Or with uvicorn directly:
+
+```bash
+uvicorn artemis.api:app --host 0.0.0.0 --port 8000
+```
+
+- **GET /health** — Returns 200 if the runtime and Qdrant are ready; 503 otherwise.
+- **POST /query** — Body: `{"query": "your question", "message_history": null}`. Optional `message_history` for multi-turn. Returns `{"final_answer", "routed_to", "error", "tool_calls"}`.
+
+### Run with Docker
+
+The non-Docker way (install with pip, run `python -m artemis.api` or `python -m artemis.agent.run --v2`) is unchanged and remains the default for local development. To run in a container:
+
+```bash
+# Build
+docker build -t artemis .
+
+# Run the API (provide .env or -e for GROQ_API_KEY, QDRANT_URL, QDRANT_API_KEY)
+docker run --env-file .env -p 8000:8000 artemis
+
+# Run the CLI (one-off query)
+docker run --env-file .env -it artemis python -m artemis.agent.run --v2 "Your query"
+```
+
+With docker-compose (API only; optional local Qdrant via `--profile with-qdrant`):
+
+```bash
+docker-compose up --build
+```
+
+See [docs/DEPLOY_AWS_FREE.md](docs/DEPLOY_AWS_FREE.md) for deployment options.
+
 ### Run with legacy agent (v1)
 
 ```python

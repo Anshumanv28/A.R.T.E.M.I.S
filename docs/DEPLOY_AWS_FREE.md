@@ -12,7 +12,7 @@ Plan for running ARTEMIS on AWS at **no cost** (or minimal cost after free tier)
 | **Vector DB** | Qdrant Cloud | Free tier (1 cluster) |
 | **App (ARTEMIS)** | AWS | Free tier options below |
 
-Keep **Qdrant Cloud** and **Groq/OpenAI** as-is; deploy only the ARTEMIS API (and agent) on AWS.
+Keep **Qdrant Cloud** and **Groq/OpenAI** as-is; deploy only the ARTEMIS API (and agent) on AWS. Build and run with Docker locally first (see [README](../README.md) “Run with Docker”); then deploy that image to EC2 or Lambda.
 
 ---
 
