@@ -266,7 +266,6 @@ artemis/
 - Structure-aware chunking strategy (see #4)
 - Web search sub-agent
 - Keyword + hybrid retrieval (BM25)
-- REST API (FastAPI)
 - Conversation memory / multi-turn support
 
 ---
