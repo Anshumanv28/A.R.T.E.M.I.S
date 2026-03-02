@@ -16,6 +16,8 @@ class AgentState(TypedDict, total=False):
     """
     # Input
     query: str
+    # Optional conversation history for multi-turn: list of {"role": "user"|"assistant", "content": "..."}
+    message_history: Optional[List[Dict[str, Any]]]
 
     # Intent classification: "tool" = run a tool, "direct" = answer without tools
     intent: Literal["tool", "direct"]

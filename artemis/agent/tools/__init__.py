@@ -2,7 +2,46 @@
 Agent tools: central registry and optional RAG tool registration helper.
 """
 
+import json
+import os
+from typing import Dict
+
 from artemis.agent.tools.registry import ToolDescriptor, ToolRegistry
+
+
+def _collection_purposes_path() -> str:
+    """Path to persisted collection purposes file (so we remember what each collection is for across runs)."""
+    p = os.environ.get("ARTEMIS_COLLECTION_PURPOSES_FILE")
+    if p:
+        return p
+    base = os.path.join(os.getcwd(), ".artemis")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, "collection_purposes.json")
+
+
+def _load_persisted_purposes() -> Dict[str, str]:
+    path = _collection_purposes_path()
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_collection_purpose(collection_name: str, purpose: str) -> None:
+    path = _collection_purposes_path()
+    data = _load_persisted_purposes()
+    data[collection_name] = (purpose or "").strip() or "Created by agent (no purpose given)"
+    try:
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 __all__ = ["ToolDescriptor", "ToolRegistry", "build_rag_registry"]
 
@@ -37,6 +76,7 @@ def build_rag_registry(
         create_rag_ingest_tool,
         create_rag_ingest_directory_tool,
         suggest_ingest_options,
+        list_directory,
         list_collections_tool,
         get_collection_info_tool,
         create_collection_tool,
@@ -48,6 +88,13 @@ def build_rag_registry(
     multi_collection = indexers is not None and retrievers_by_collection is not None and len(indexers) > 0 and len(retrievers_by_collection) > 0
     collection_enum = sorted(indexers.keys()) if multi_collection else None
     default_coll = default_collection or (list(indexers.keys())[0] if indexers else None)
+    # Aliases for ingest: "system" → artemis_system_docs; "artemis_documents" → artemis_user_docs
+    _ingest_collection_alias = {}
+    if multi_collection and indexers:
+        if "artemis_system_docs" in indexers:
+            _ingest_collection_alias["system"] = "artemis_system_docs"
+        if "artemis_user_docs" in indexers:
+            _ingest_collection_alias["artemis_documents"] = "artemis_user_docs"
 
     # Resolve search: multi-collection -> collection_name + mode; single retrievers dict -> mode; else single retriever
     if multi_collection:
@@ -62,7 +109,7 @@ def build_rag_registry(
             coll = kwargs.get("collection_name") or default_coll
             by_mode = retrievers_by_collection.get(coll)
             if not by_mode:
-                return [{"error": f"Collection '{coll}' not available. Use one of: {collection_enum}"}]
+                return [{"error": f"Collection '{coll}' is not available. Create it with create_collection then retry."}]
             r = by_mode.get(mode)
             if r is None:
                 return [{"error": f"Search mode '{mode}' not available. Use one of: {search_mode_enum}"}]
@@ -105,14 +152,13 @@ def build_rag_registry(
     if multi_collection and collection_enum:
         search_schema["properties"]["collection_name"] = {
             "type": "string",
-            "description": "Which collection to search. Use artemis_system_docs for system/docs/RAG/planning; use artemis_user_docs (or default) for user data and general tasks.",
-            "enum": collection_enum,
+            "description": "Collection to search. Use a name returned by list_collections: for system/docs/RAG questions use the collection that holds system documentation; for user data use the collection for user content. If list_collections is empty, create a collection first or inform the user.",
             "default": default_coll,
         }
     registry.register(
         "search_documents",
         search_documents,
-        description="Search the knowledge base for relevant documents. Returns a list of {text, score, metadata}. When multiple collections exist, pass collection_name: artemis_system_docs for system knowledge, artemis_user_docs for user data. Optional search_mode: semantic (default), keyword, hybrid.",
+        description="Search the knowledge base for relevant documents. Returns a list of {text, score, metadata}. When multiple collections exist, call list_collections and pass collection_name with one of the returned names. Optional search_mode: semantic (default), keyword, hybrid.",
         parameters_schema=search_schema,
     )
 
@@ -133,7 +179,7 @@ def build_rag_registry(
         }
         if multi_collection and collection_enum:
             out["collections"] = collection_enum
-            out["collection_usage"] = "artemis_system_docs = system/docs/RAG/planning; artemis_user_docs = user data (default)"
+            out["collection_usage"] = "Use list_collections to see available collection names; use the one for system/docs when answering about this system, the one for user data for user content."
         return out
 
     registry.register(
@@ -171,6 +217,25 @@ def build_rag_registry(
         },
     )
 
+    def list_directory_kw(**kwargs):
+        return list_directory(
+            path=kwargs.get("path", "."),
+            max_depth=int(kwargs.get("max_depth", 1)),
+        )
+
+    registry.register(
+        "list_directory",
+        list_directory_kw,
+        description="List directories and files at a path to discover folder structure. Use when the user asks what folders exist, what they can ingest, project layout, or what's in a directory. path: directory to list (use '.' for current working directory). max_depth: 1 = immediate children only, 2 = include one more level.",
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Directory path to list; use '.' or omit for current working directory.", "default": "."},
+                "max_depth": {"type": "integer", "description": "Levels to show: 1 = immediate children only, 2 = children and grandchildren.", "default": 1},
+            },
+        },
+    )
+
     if indexer is not None or (multi_collection and indexers):
         from artemis.rag.ingestion.chunkers.registry import CHUNKERS
         from artemis.rag.ingestion.converters.csv_converter import CSV_CONVERTERS, DocumentSchema
@@ -180,10 +245,11 @@ def build_rag_registry(
 
         if multi_collection and indexers:
             def ingest_file_kw(**kwargs):
-                coll = kwargs.get("collection_name") or default_coll
+                coll = (kwargs.get("collection_name") or default_coll).strip()
+                coll = _ingest_collection_alias.get(coll, coll)
                 idx = indexers.get(coll)
                 if idx is None:
-                    return [{"error": f"Collection '{coll}' not available. Use one of: {collection_enum}"}]
+                    return [{"error": f"Collection '{coll}' is not available. Create it with create_collection then retry."}]
                 ingest_fn = create_rag_ingest_tool(idx)
                 k = dict(kwargs)
                 if k.get("chunk_strategy") == "agentic" and llm_client_for_agentic is not None:
@@ -205,8 +271,7 @@ def build_rag_registry(
                     "file_type": {"type": "string", "enum": ["csv", "pdf", "docx", "md", "text"]},
                     "collection_name": {
                         "type": "string",
-                        "description": "Which collection to ingest into. Use artemis_system_docs for system docs; artemis_user_docs for user data (default).",
-                        "enum": collection_enum,
+                        "description": "Collection to ingest into. Use a name from list_collections; for system docs use the system-docs collection, for user content use the user-data collection (default).",
                         "default": default_coll,
                     },
                     "chunk_strategy": {
@@ -265,16 +330,17 @@ def build_rag_registry(
         registry.register(
             "ingest_file",
             ingest_file_kw,
-            description="Ingest a file into the knowledge base. file_type: csv, pdf, docx, md, text. When multiple collections exist, pass collection_name: artemis_system_docs for system docs, artemis_user_docs for user data. Optional: chunk_strategy, chunk_size, overlap; for CSV only: schema.",
+            description="Ingest a file into the knowledge base. file_type: csv, pdf, docx, md, text. When multiple collections exist, call list_collections and pass collection_name with one of the returned names. Optional: chunk_strategy, chunk_size, overlap; for CSV only: schema.",
             parameters_schema=ingest_file_schema,
         )
 
         if multi_collection and indexers:
             def ingest_directory_kw(**kwargs):
-                coll = kwargs.get("collection_name") or default_coll
+                coll = (kwargs.get("collection_name") or default_coll).strip()
+                coll = _ingest_collection_alias.get(coll, coll)
                 idx = indexers.get(coll)
                 if idx is None:
-                    return [{"error": f"Collection '{coll}' not available. Use one of: {collection_enum}"}]
+                    return [{"error": f"Collection '{coll}' is not available. Create it with create_collection then retry."}]
                 ingest_dir_fn = create_rag_ingest_directory_tool(idx, default_extension="md")
                 llm = llm_client_for_agentic if kwargs.get("chunk_strategy") == "agentic" else None
                 return ingest_dir_fn(
@@ -284,6 +350,7 @@ def build_rag_registry(
                     chunk_size=kwargs.get("chunk_size"),
                     overlap=kwargs.get("overlap"),
                     llm_client=llm,
+                    recursive=bool(kwargs.get("recursive", False)),
                 )
 
             ingest_dir_schema = {
@@ -291,10 +358,14 @@ def build_rag_registry(
                 "properties": {
                     "directory_path": {"type": "string"},
                     "file_extension": {"type": "string", "default": "md"},
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "If false (default), only files directly in the directory are ingested. If true, include all matching files in subdirectories.",
+                        "default": False,
+                    },
                     "collection_name": {
                         "type": "string",
-                        "description": "Which collection to ingest into. artemis_system_docs for system docs; artemis_user_docs for user data (default).",
-                        "enum": collection_enum,
+                        "description": "Collection to ingest into. Use a name from list_collections; for system docs use the system-docs collection, for user content use the user-data collection (default).",
                         "default": default_coll,
                     },
                     "chunk_strategy": {
@@ -319,6 +390,7 @@ def build_rag_registry(
                     chunk_size=kwargs.get("chunk_size"),
                     overlap=kwargs.get("overlap"),
                     llm_client=llm,
+                    recursive=bool(kwargs.get("recursive", False)),
                 )
 
             ingest_dir_schema = {
@@ -326,6 +398,11 @@ def build_rag_registry(
                 "properties": {
                     "directory_path": {"type": "string"},
                     "file_extension": {"type": "string", "default": "md"},
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "If false (default), only files directly in the directory are ingested. If true, include all matching files in subdirectories.",
+                        "default": False,
+                    },
                     "chunk_strategy": {
                         "type": "string",
                         "description": "Optional. One of: " + ", ".join(chunk_strategy_enum) + ".",
@@ -340,17 +417,35 @@ def build_rag_registry(
         registry.register(
             "ingest_directory",
             ingest_directory_kw,
-            description="Ingest all files in a directory (e.g. RAG_demo/techcorp_docs). When multiple collections exist, pass collection_name. file_extension: md, pdf, txt, etc.; default md. Optional: chunk_strategy, chunk_size, overlap.",
+            description="Ingest files in a directory. By default only files directly in the directory (no subdirectories); set recursive=true to include subdirectories. file_extension: md, pdf, txt, etc.; default md. Optional: chunk_strategy, chunk_size, overlap. When multiple collections exist, call list_collections and pass collection_name with one of the returned names.",
             parameters_schema=ingest_dir_schema,
         )
 
+    # Default purposes for standard names; agent can create any name and record a purpose (persisted for later runs).
+    COLLECTION_PURPOSES: Dict[str, str] = {
+        "artemis_system_docs": "System documentation and operational KB for ARTEMIS (use for questions about how the system works, RAG, planner, architecture).",
+        "artemis_user_docs": "User data and ingested content (use for user documents and general content).",
+    }
+
     def list_coll(**kwargs):
-        return list_collections_tool()
+        names = list_collections_tool()
+        if not multi_collection or not names:
+            return {"collections": names, "purposes": {}}
+        # Merge static defaults with persisted purposes (agent-created collections and their recorded purpose)
+        purposes = dict(COLLECTION_PURPOSES)
+        persisted = _load_persisted_purposes()
+        for n in names:
+            if n in persisted and persisted[n]:
+                purposes[n] = persisted[n]
+            elif n not in purposes:
+                purposes[n] = "(no purpose recorded)"
+        purposes = {k: purposes[k] for k in names}
+        return {"collections": names, "purposes": purposes}
 
     registry.register(
         "list_collections",
         list_coll,
-        description="List all Qdrant collection names.",
+        description="List all Qdrant collection names and their purposes (when known). Use the returned names for collection_name in search_documents, ingest_file, or ingest_directory. Use purposes to choose the right collection (system docs vs user data).",
         parameters_schema={"type": "object", "properties": {}},
     )
 
@@ -369,20 +464,37 @@ def build_rag_registry(
     )
 
     def create_coll(**kwargs):
-        return create_collection_tool(
-            kwargs.get("collection_name", ""),
+        name = (kwargs.get("collection_name") or "").strip()
+        if not name:
+            raise ValueError("collection_name is required and cannot be empty.")
+        created = create_collection_tool(
+            name,
             embedding_dim=kwargs.get("embedding_dim"),
         )
+        # Purpose: from agent (so we remember in later runs), or static default, or generic
+        purpose = (kwargs.get("purpose") or "").strip() or COLLECTION_PURPOSES.get(name, "")
+        if created and purpose:
+            _save_collection_purpose(name, purpose)
+        elif created:
+            _save_collection_purpose(name, "Created by agent (no purpose given)")
+        return {"ok": bool(created), "created": bool(created), "collection_name": name, "purpose": purpose}
 
     registry.register(
         "create_collection",
         create_coll,
-        description="Create a new Qdrant collection.",
+        description="Create a new Qdrant collection. Pass any valid collection_name (e.g. artemis_system_docs, artemis_user_docs, or a name you choose). Optionally pass purpose so we remember what this collection is for in later runs. Never leave collection_name empty.",
         parameters_schema={
             "type": "object",
             "properties": {
-                "collection_name": {"type": "string"},
+                "collection_name": {
+                    "type": "string",
+                    "description": "Any valid name. Common choices: artemis_system_docs (system/docs), artemis_user_docs (user data). You can also choose your own name. Required.",
+                },
                 "embedding_dim": {"type": "integer"},
+                "purpose": {
+                    "type": "string",
+                    "description": "Optional. Why this collection was created (e.g. 'user meeting notes 2024', 'project docs'). Stored so list_collections shows it in later runs.",
+                },
             },
             "required": ["collection_name"],
         },

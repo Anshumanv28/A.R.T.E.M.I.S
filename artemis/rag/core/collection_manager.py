@@ -52,6 +52,7 @@ def create_collection(
     Create a new Qdrant collection.
     
     If embedding_dim is not provided, uses the default embedder dimension (384 for all-MiniLM-L6-v2).
+    Idempotent: if the collection already exists (or Qdrant returns 409), returns True without raising.
     
     Args:
         collection_name: Name of the collection to create
@@ -60,28 +61,33 @@ def create_collection(
         qdrant_api_key: Qdrant API key (defaults to env var QDRANT_API_KEY)
         
     Returns:
-        True if collection was created successfully
+        True if collection was created or already exists
         
     Raises:
-        ValueError: If collection already exists
-        Exception: If creation fails
+        ValueError: If collection_name is empty
+        Exception: If creation fails (other than already exists)
     """
+    name = (collection_name or "").strip()
+    if not name:
+        raise ValueError("collection_name is required and cannot be empty")
+
     client = get_qdrant_client(qdrant_url, qdrant_api_key)
-    
-    # Check if collection already exists
+
     try:
         existing_collections = list_collections(qdrant_url, qdrant_api_key)
-        if collection_name in existing_collections:
-            raise ValueError(f"Collection '{collection_name}' already exists")
+        if name in existing_collections:
+            logger.info(f"Collection '{name}' already exists; no-op.")
+            return True
     except Exception:
         # If listing fails, try to get collection directly
         try:
-            client.get_collection(collection_name)
-            raise ValueError(f"Collection '{collection_name}' already exists")
-        except:
+            client.get_collection(name)
+            logger.info(f"Collection '{name}' already exists; no-op.")
+            return True
+        except Exception:
             # Collection doesn't exist, proceed with creation
             pass
-    
+
     # Get embedding dimension
     if embedding_dim is None:
         # Use default embedder dimension (all-MiniLM-L6-v2 = 384)
@@ -96,22 +102,27 @@ def create_collection(
     
     try:
         logger.info(
-            f"Creating Qdrant collection '{collection_name}' "
+            f"Creating Qdrant collection '{name}' "
             f"with embedding dimension {embedding_dim}"
         )
-        
+
         client.create_collection(
-            collection_name=collection_name,
+            collection_name=name,
             vectors_config=VectorParams(
                 size=embedding_dim,
                 distance=Distance.COSINE,
             ),
         )
-        
-        logger.info(f"Successfully created collection '{collection_name}'")
+
+        logger.info(f"Successfully created collection '{name}'")
         return True
-        
+
     except Exception as e:
+        err_str = str(e).lower()
+        # Qdrant returns 409 when collection already exists; treat as success (idempotent)
+        if "409" in err_str or "already exists" in err_str or "conflict" in err_str:
+            logger.info(f"Collection '{name}' already exists (Qdrant 409); no-op.")
+            return True
         logger.exception(f"Failed to create collection: {e}")
         raise
 

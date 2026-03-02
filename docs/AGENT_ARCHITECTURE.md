@@ -2,6 +2,58 @@
 
 The A.R.T.E.M.I.S agent follows a **ReAct-style** (Reasoning + Acting) design: a planner chooses whether to use a tool or answer directly, and a single tool-execution loop runs any registered tool and feeds results back to the planner. This matches patterns used in LangGraph-style systems and Plan-and-Execute hybrids.
 
+## Flow from user prompt to answer
+
+### V2 (Supervisor + sub-agents, `--v2`)
+
+1. **Entry**  
+   User types a query.  
+   - **Interactive:** `main()` already has a `Supervisor` and calls `supervisor.invoke(query, message_history)`.  
+   - **Single-shot:** `run_agent_v2(query)` builds a `Supervisor` (with `system_context=None`), then `supervisor.invoke(query)`.
+
+2. **Routing (Supervisor)**  
+   `Supervisor.invoke()` calls `_route(query)`:
+   - **First time only:** Accessing `self.system_context` triggers `_ensure_system_context()` → `load_system_context(registry)` (calls `list_collections`, `get_collection_info` per collection, `get_rag_options`). Result is cached.
+   - Build routing prompt: agent names/descriptions + `system_context.collections`.
+   - **LLM call** (lightweight): “Route this query to one of: direct, rag_search, ingestion, collection_management.” Response is parsed to get `agent_name`.
+
+3. **Branch**
+   - **If `agent_name == "direct"`:** Build minimal `AgentState`, call `direct_answer_node(state, config)` → one **LLM call** with direct-answer prompt (no tools) → `final_answer` → return to caller.
+   - **Else:** `_get_agent(agent_name)` — if that sub-agent isn’t built yet, build and cache it (only the one that was routed to). Then `sub.invoke(query, message_history)`.
+
+4. **Sub-agent run (e.g. rag_search, ingestion, collection_management)**  
+   Sub-agent is a **ReAct graph** (same shape as V1): planner ↔ tool_node ↔ direct_answer.
+   - **Initial state:** `query`, `message_history`, empty `tool_calls`, `step_count=0`.
+   - **Planner node:** LLM sees that sub-agent’s system prompt (tools, collections, rules) + query + prior tool results. Returns JSON: `intent` ("tool" or "direct"), and if tool: `tool_name`, `tool_args`.
+   - **If intent == "direct":** Go to **direct_answer** node → one LLM call to synthesize from query + `tool_calls_summary` and formatted tool results → set `final_answer` → **END**.
+   - **If intent == "tool":** Go to **tool_node** → `registry.get(tool_name).callable(**tool_args)` (e.g. `search_documents`, `ingest_directory`). Append to `tool_calls`, increment `step_count`, build `tool_calls_summary`. Then:
+     - If `step_count >= max_tool_steps` → go to **direct_answer** (cap).
+     - Else → back to **planner** (loop with new tool results).
+   - When the graph hits **direct_answer** and produces `final_answer`, the sub-agent returns that state to the Supervisor.
+
+5. **Return**  
+   Supervisor adds `routed_to: agent_name` to the state and returns.  
+   `main()` (or `run_agent_v2`) gets `final_answer`, `tool_calls`, `routed_to`, etc., and prints the answer.
+
+So per prompt in V2: **one routing LLM call**, then either **one direct-answer LLM call** (if routed to direct) or **one or more planner + tool_node + direct_answer steps** inside the chosen sub-agent (each step: planner LLM → optional tool run → eventually direct_answer LLM).
+
+### V1 (single ReAct graph, no `--v2`)
+
+1. **Entry**  
+   `run_agent(query, ...)` builds or uses a registry, then builds one `AgentGraph` (planner + tool_node + direct_answer) and calls `agent.invoke(query)`.
+
+2. **Single ReAct loop**  
+   Same graph as a sub-agent, but with the **full** tool list and the **planner_system.md** prompt (all tools, RAG options, system/self-awareness rules).
+   - **Planner** → intent + (optional) tool_name/tool_args.
+   - **If direct** → direct_answer node → final_answer → END.
+   - **If tool** → tool_node runs the tool, then back to planner (or to direct_answer if step limit).
+   - Repeat until planner returns direct or step limit.
+
+3. **Return**  
+   State with `final_answer`, `tool_calls`, etc. is returned and printed.
+
+So per prompt in V1: **one or more** planner LLM calls, interleaved with tool runs, then **one** direct_answer LLM call.
+
 ## High-level flow
 
 1. **Planner** – Receives the user query and a list of available tools from the **tool registry**. It outputs:

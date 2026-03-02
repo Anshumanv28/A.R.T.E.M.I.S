@@ -208,14 +208,18 @@ def ingest_file(
     chunker = CHUNKERS[strategy]
     
     # Step 3: Chunk the loaded content
+    # Agentic chunker only accepts chunk_size and llm_client; others (e.g. overlap) must be omitted
+    kwargs_for_chunker = dict(chunk_kwargs)
+    if strategy == ChunkStrategy.AGENTIC:
+        kwargs_for_chunker = {k: v for k, v in kwargs_for_chunker.items() if k in ("chunk_size", "llm_client")}
     logger.debug(f"Chunking content using {strategy.value} strategy")
     try:
         # CSV chunker needs special handling (takes DataFrame + optional schema + csv_path)
         if file_type == FileType.CSV and strategy == ChunkStrategy.CSV_ROW:
-            documents, metadata = chunker(raw, schema=schema, csv_path=path, **chunk_kwargs)
+            documents, metadata = chunker(raw, schema=schema, csv_path=path, **kwargs_for_chunker)
         else:
             # Other chunkers take text string
-            documents, metadata = chunker(raw, **chunk_kwargs)
+            documents, metadata = chunker(raw, **kwargs_for_chunker)
     except Exception as e:
         logger.exception(f"Error chunking file: {path}", exc_info=True)
         raise

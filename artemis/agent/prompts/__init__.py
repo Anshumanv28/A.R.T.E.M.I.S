@@ -3,10 +3,19 @@ Agent system prompts: load from files under this directory.
 
 Keeps planner and direct-answer prompts separate from node code and makes them
 easy to edit and version. Use load_planner_prompt() and load_direct_answer_prompt().
+
+Prompt classes for supervisor and specialized agents: BasePrompt, SupervisorPrompt,
+RAGSearchPrompt, IngestionPrompt, CollectionManagementPrompt.
 """
 
 from pathlib import Path
 from typing import Any, Dict
+
+from artemis.agent.prompts.base import BasePrompt
+from artemis.agent.prompts.supervisor import SupervisorPrompt
+from artemis.agent.prompts.rag_agent import RAGSearchPrompt
+from artemis.agent.prompts.ingestion_agent import IngestionPrompt
+from artemis.agent.prompts.collection_agent import CollectionManagementPrompt
 
 _PROMPTS_DIR = Path(__file__).parent
 
@@ -43,3 +52,14 @@ def load_direct_answer_prompt(with_context: bool) -> str:
     """
     name = "direct_answer_with_context.md" if with_context else "direct_answer_no_context.md"
     return _read_prompt(name)
+
+
+__all__ = [
+    "BasePrompt",
+    "SupervisorPrompt",
+    "RAGSearchPrompt",
+    "IngestionPrompt",
+    "CollectionManagementPrompt",
+    "load_planner_prompt",
+    "load_direct_answer_prompt",
+]
