@@ -305,6 +305,17 @@ def run_agent(
     return dict(result)
 
 
+def get_v2_runtime(config: Optional[AgentConfig] = None) -> tuple[AgentConfig, ToolRegistry]:
+    """
+    Build config and registry for the default v2 (Supervisor) multi-collection setup.
+    Used by the HTTP API so it can reuse one registry across requests.
+    """
+    if config is None:
+        config = AgentConfig.from_env()
+    registry = _build_registry_v2(config, None, None, "artemis_documents")
+    return (config, registry)
+
+
 def run_agent_v2(
     query: str,
     config: Optional[AgentConfig] = None,

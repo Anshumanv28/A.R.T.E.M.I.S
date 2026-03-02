@@ -17,13 +17,11 @@ dependencies = [
     "openai>=1.0.0",
     # Data
     "kagglehub>=0.2.0",
+    "pandas>=2.0.0",
     # Multimodal (optional for Phase 1)
     # "livekit>=0.9.0",
-    # Backend (Phase 2)
-    # "fastapi>=0.104.0",
-    # "uvicorn>=0.24.0",
+    # HTTP API
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
 ]
-
-[tool.setuptools]
-python-requires = ">=3.12.8"
 
