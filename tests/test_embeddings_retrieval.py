@@ -65,11 +65,47 @@ def _get_test_documents_from_dataset():
             str(RESTAURANT_DATASET_PATH), 
             schema=DocumentSchema.RESTAURANT
         )
-        # Use first 10 documents for testing
-        return documents[:10], metadata[:10]
+        # Use first 20 documents for testing
+        return documents[:20], metadata[:20]
     except Exception as e:
         print(f"⚠️  Failed to load documents from dataset: {e}")
         return [], []
+
+
+def setup_test_collection():
+    """Ensure the artemis_test collection exists and has some initial data."""
+    if not COMPONENTS_AVAILABLE or not RESTAURANT_DATASET_PATH.exists():
+        return
+        
+    print("\n[Setup] Preparing test collection 'artemis_test'...")
+    try:
+        indexer = Indexer(collection_name="artemis_test")
+        
+        # Optionally clear the collection at the start of the test run
+        try:
+            indexer.qdrant_client.delete_collection("artemis_test")
+            print("[Setup] Cleared existing 'artemis_test' collection")
+        except Exception:
+            pass
+            
+        # Ensure collection exists
+        indexer._ensure_collection_exists()
+        
+        # Ingest a tiny amount of data for tests
+        test_docs, test_metadata = _get_test_documents_from_dataset()
+        if test_docs:
+            print(f"[Setup] Ingesting {len(test_docs)} documents for tests...")
+            indexer.add_documents(test_docs, test_metadata)
+    except Exception as e:
+        print(f"[Setup] Warning: Could not setup test collection: {e}")
+
+try:
+    import pytest
+    @pytest.fixture(scope="module", autouse=True)
+    def module_setup():
+        setup_test_collection()
+except ImportError:
+    pass
 
 
 def test_embedding_generation():
@@ -178,23 +214,24 @@ def test_indexer_storage():
         
         print(f"Indexing {len(test_docs)} documents from restaurant dataset...")
         
-        indexer = Indexer(collection_name="test_storage")
-        indexer.add_documents(test_docs, test_metadata)
+        indexer = Indexer(collection_name="artemis_test")
+        
+        # Get initial count
+        try:
+            initial_count = indexer.qdrant_client.count(indexer.collection_name).count
+        except Exception:
+            initial_count = 0
+            
+        # Use a small subset to test storage
+        indexer.add_documents(test_docs[:3], test_metadata[:3])
         
         # Verify storage
         stored_count = indexer.qdrant_client.count(indexer.collection_name).count
-        assert stored_count == len(test_docs), \
-            f"Expected {len(test_docs)} documents, found {stored_count}"
+        assert stored_count == initial_count + 3, \
+            f"Expected {initial_count + 3} documents, found {stored_count}"
         
-        print(f"✅ Successfully stored {stored_count} documents")
+        print(f"✅ Successfully stored 3 new documents")
         print(f"   Collection: {indexer.collection_name}")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-            print("✅ Cleaned up test collection")
-        except Exception as e:
-            print(f"⚠️  Could not clean up collection: {e}")
         
     except Exception as e:
         print(f"❌ Indexer storage test failed: {e}")
@@ -220,19 +257,13 @@ def test_retriever_semantic_search():
             print("⚠️  Dataset not found, skipping retrieval test")
             return
         
-        # Use first 5 documents
-        test_docs = test_docs[:5]
-        test_metadata = test_metadata[:5]
-        
-        print(f"Testing retrieval with {len(test_docs)} documents...")
-        
-        indexer = Indexer(collection_name="test_retrieval")
-        indexer.add_documents(test_docs, test_metadata)
+        # Use existing documents from setup
+        indexer = Indexer(collection_name="artemis_test")
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
             indexer=indexer,
-            collection_name="test_retrieval"
+            collection_name="artemis_test"
         )
         
         # Test query
@@ -244,13 +275,6 @@ def test_retriever_semantic_search():
         
         print(f"✅ Retrieved {len(results)} results for query: '{query}'")
         print(f"   Top result score: {results[0].get('score', 'N/A')}")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-            print("✅ Cleaned up test collection")
-        except Exception as e:
-            print(f"⚠️  Could not clean up collection: {e}")
         
     except Exception as e:
         print(f"❌ Retriever semantic search test failed: {e}")
@@ -301,29 +325,19 @@ def test_retrieval_mode_switching():
             print("⚠️  Dataset not found, skipping mode switching test")
             return
         
-        test_docs = test_docs[:5]
-        test_metadata = test_metadata[:5]
-        
-        indexer = Indexer(collection_name="test_modes")
-        indexer.add_documents(test_docs, test_metadata)
+        indexer = Indexer(collection_name="artemis_test")
         
         # Test semantic mode
         retriever_semantic = Retriever(
             mode=RetrievalMode.SEMANTIC,
             indexer=indexer,
-            collection_name="test_modes"
+            collection_name="artemis_test"
         )
         
         results_semantic = retriever_semantic.retrieve("restaurant", k=2)
         assert len(results_semantic) > 0
         
         print("✅ Semantic mode works")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-        except Exception:
-            pass
         
     except Exception as e:
         print(f"❌ Retrieval mode switching test failed: {e}")
@@ -361,7 +375,7 @@ def test_end_to_end_pipeline():
         
         # Step 2: Index documents
         print("Step 2: Indexing documents...")
-        indexer = Indexer(collection_name="test_e2e")
+        indexer = Indexer(collection_name="artemis_test")
         indexer.add_documents(test_docs, test_metadata)
         print(f"✅ Indexed {len(test_docs)} documents")
         
@@ -370,7 +384,7 @@ def test_end_to_end_pipeline():
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
             indexer=indexer,
-            collection_name="test_e2e"
+            collection_name="artemis_test"
         )
         
         query = "French restaurant"
@@ -378,13 +392,6 @@ def test_end_to_end_pipeline():
         print(f"✅ Retrieved {len(results)} results")
         print(f"   Query: '{query}'")
         print(f"   Top result score: {results[0].get('score', 'N/A') if results else 'N/A'}")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-            print("✅ Cleaned up test collection")
-        except Exception as e:
-            print(f"⚠️  Could not clean up collection: {e}")
         
     except Exception as e:
         print(f"❌ End-to-end pipeline test failed: {e}")
@@ -414,16 +421,12 @@ def test_retrieval_relevance():
             schema=DocumentSchema.RESTAURANT
         )
         
-        test_docs = documents[:20]
-        test_metadata = metadata[:20]
-        
-        indexer = Indexer(collection_name="test_relevance")
-        indexer.add_documents(test_docs, test_metadata)
+        indexer = Indexer(collection_name="artemis_test")
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
             indexer=indexer,
-            collection_name="test_relevance"
+            collection_name="artemis_test"
         )
         
         # Test multiple queries
@@ -437,12 +440,6 @@ def test_retrieval_relevance():
             results = retriever.retrieve(query, k=3)
             assert len(results) > 0, f"No results for query: {query}"
             print(f"✅ Query '{query}': {len(results)} results (top score: {results[0].get('score', 'N/A')})")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-        except Exception:
-            pass
         
     except Exception as e:
         print(f"❌ Retrieval relevance test failed: {e}")
@@ -472,16 +469,12 @@ def test_metadata_preservation():
             schema=DocumentSchema.RESTAURANT
         )
         
-        test_docs = documents[:10]
-        test_metadata = metadata[:10]
-        
-        indexer = Indexer(collection_name="test_metadata")
-        indexer.add_documents(test_docs, test_metadata)
+        indexer = Indexer(collection_name="artemis_test")
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
             indexer=indexer,
-            collection_name="test_metadata"
+            collection_name="artemis_test"
         )
         
         results = retriever.retrieve("restaurant", k=5)
@@ -497,12 +490,6 @@ def test_metadata_preservation():
             assert has_fields, f"Metadata missing expected fields: {result_metadata}"
         
         print(f"✅ Metadata preserved in {len(results)} results")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-        except Exception:
-            pass
         
     except Exception as e:
         print(f"❌ Metadata preservation test failed: {e}")
@@ -532,16 +519,12 @@ def test_multiple_queries():
             schema=DocumentSchema.RESTAURANT
         )
         
-        test_docs = documents[:15]
-        test_metadata = metadata[:15]
-        
-        indexer = Indexer(collection_name="test_queries")
-        indexer.add_documents(test_docs, test_metadata)
+        indexer = Indexer(collection_name="artemis_test")
         
         retriever = Retriever(
             mode=RetrievalMode.SEMANTIC,
             indexer=indexer,
-            collection_name="test_queries"
+            collection_name="artemis_test"
         )
         
         queries = [
@@ -554,12 +537,6 @@ def test_multiple_queries():
         for query in queries:
             results = retriever.retrieve(query, k=3)
             print(f"✅ Query '{query}': {len(results)} results")
-        
-        # Cleanup
-        try:
-            indexer.qdrant_client.delete_collection(indexer.collection_name)
-        except Exception:
-            pass
         
     except Exception as e:
         print(f"❌ Multiple queries test failed: {e}")
@@ -581,6 +558,10 @@ if __name__ == "__main__":
         print(f"⚠️  Restaurant dataset not found at {RESTAURANT_DATASET_PATH}")
         print("   Many tests will be skipped. See test file header for dataset requirements.")
         print()
+        
+    # Setup test collection once
+    setup_test_collection()
+    print()
     
     # Run unit tests
     print("Running Unit Tests...")

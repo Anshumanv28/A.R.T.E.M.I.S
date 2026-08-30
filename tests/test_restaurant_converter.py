@@ -175,13 +175,13 @@ def test_retriever_indexing(doc_paths, metadata_path):
         
         # Use Indexer for document indexing
         indexer = Indexer(
-            collection_name="test_restaurants",
+            collection_name="artemis_test",
             qdrant_url=qdrant_url,
             qdrant_api_key=qdrant_key
         )
         
         print(f"✅ Indexer initialized")
-        print(f"   Collection: test_restaurants")
+        print(f"   Collection: artemis_test")
         print()
         
         # Count files before indexing
