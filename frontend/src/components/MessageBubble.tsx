@@ -1,3 +1,5 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatTurn } from "../hooks/useChat";
 import { TracePanel } from "./TracePanel";
 
@@ -11,7 +13,13 @@ export function MessageBubble({ turn }: Props) {
 
   return (
     <div className={`message-bubble ${turn.role}`}>
-      <div className="message-content">{turn.content}</div>
+      {isAssistant ? (
+        <div className="message-content markdown">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.content}</ReactMarkdown>
+        </div>
+      ) : (
+        <div className="message-content">{turn.content}</div>
+      )}
       {isAssistant && hasTrace && (
         <TracePanel routedTo={turn.routedTo} toolCalls={turn.toolCalls} />
       )}

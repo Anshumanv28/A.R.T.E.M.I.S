@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { postQuery, ApiError } from "../api/client";
 import type { HistoryMessage, ToolCall } from "../api/types";
 
@@ -22,12 +22,32 @@ function makeId(): string {
     : Math.random().toString(36).slice(2);
 }
 
+// sessionStorage (not localStorage): survives a refresh, which is the actual
+// complaint, without indefinitely accumulating old conversations across
+// unrelated browser sessions.
+const STORAGE_KEY = "artemis-chat-history";
+
+function loadTurns(): ChatTurn[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ChatTurn[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function useChat() {
   const [state, setState] = useState<ChatState>({
-    turns: [],
+    turns: loadTurns(),
     isLoading: false,
     error: null,
   });
+
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state.turns));
+  }, [state.turns]);
 
   const send = useCallback(async (query: string) => {
     const trimmed = query.trim();
@@ -71,11 +91,16 @@ export function useChat() {
     setState((prev) => ({ ...prev, error: null }));
   }, []);
 
+  const clearHistory = useCallback(() => {
+    setState({ turns: [], isLoading: false, error: null });
+  }, []);
+
   return {
     turns: state.turns,
     isLoading: state.isLoading,
     error: state.error,
     send,
     dismissError,
+    clearHistory,
   };
 }

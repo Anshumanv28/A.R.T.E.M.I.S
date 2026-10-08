@@ -24,7 +24,11 @@ export function HealthBadge() {
   }, []);
 
   const color =
-    status === "ok" ? "#2ecc71" : status === "checking" ? "#95a5a6" : "#e74c3c";
+    status === "ok"
+      ? "var(--success)"
+      : status === "checking"
+        ? "var(--neutral)"
+        : "var(--danger)";
   const label =
     status === "ok"
       ? "Backend ready"
