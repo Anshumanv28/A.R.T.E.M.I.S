@@ -137,6 +137,8 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 - **GET /health** — Returns 200 if the runtime and Qdrant are ready; 503 otherwise.
 - **POST /query** — Body: `{"query": "your question", "message_history": null}`. Optional `message_history` for multi-turn. Returns `{"final_answer", "routed_to", "error", "tool_calls"}`.
 
+CORS is locked down by default (only `http://localhost:5173`, the Vite dev server, is allowed). To call the API from a browser-based frontend hosted elsewhere, set `ARTEMIS_CORS_ORIGINS` (comma-separated) — see `.env.example`.
+
 ### Live demo
 
 - **Demo base URL:** `http://54.87.62.83:8000`
@@ -145,6 +147,23 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 - **Query:** `POST /query`
 
 The demo is served over **HTTP** (no HTTPS). It is best-effort: the instance may be stopped or restarted, and the public IP can change without an Elastic IP, so the demo may be unavailable at times.
+
+### Frontend
+
+A React + Vite chat UI lives in `frontend/`. It calls `POST /query` and shows each answer's `routed_to` agent and `tool_calls` as an expandable trace — a visual demo of the Supervisor routing.
+
+```bash
+cd frontend
+npm install
+cp .env.example .env   # VITE_API_BASE_URL defaults to http://localhost:8000
+npm run dev
+```
+
+Open the printed local URL (default `http://localhost:5173`). Point `VITE_API_BASE_URL` at the live demo (`http://54.87.62.83:8000`) instead of localhost to try it against the hosted backend.
+
+The backend's CORS allow-list includes `http://localhost:5173` by default, so no server-side config is needed for local dev. To deploy the frontend (e.g. to Vercel): set the project's root directory to `frontend`, set `VITE_API_BASE_URL` to your backend's URL, and after the first deploy add the resulting `https://*.vercel.app` URL to the backend's `ARTEMIS_CORS_ORIGINS` env var (see `.env.example`) so the browser is allowed to call it.
+
+Note: the live demo backend is HTTP-only while a Vercel deployment is HTTPS — browsers may block this as mixed content. This is a known limitation of the current demo setup, not a frontend bug.
 
 ### Run with Docker
 

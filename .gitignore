@@ -186,6 +186,16 @@ datasets/
 *.parquet
 *.pkl
 *.pickle
+# ...except frontend tooling config, which must stay tracked
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig*.json
+# ...and frontend source (caught by the Python-packaging lib/ rule above)
+!frontend/src/lib/
+!frontend/src/lib/*.ts
+
+# Frontend build caches
+frontend/*.tsbuildinfo
 
 # Model files
 models/

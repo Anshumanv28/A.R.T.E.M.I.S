@@ -2,10 +2,12 @@
 HTTP API for ARTEMIS: same config and agent as the CLI, separate entrypoint.
 """
 
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -48,6 +50,21 @@ app = FastAPI(
     title="ARTEMIS API",
     description="Query the ARTEMIS agent (Supervisor v2). Same config as CLI (env vars).",
     lifespan=_lifespan,
+)
+
+# CORS: localhost dev (Vite default) always allowed; production frontend origins
+# (e.g. a Vercel deployment) come from ARTEMIS_CORS_ORIGINS since that URL isn't
+# known until the frontend is first deployed.
+_default_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_extra_origins = os.environ.get("ARTEMIS_CORS_ORIGINS", "")
+_allow_origins = _default_origins + [o.strip() for o in _extra_origins.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allow_origins,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+    allow_credentials=False,
 )
 
 
