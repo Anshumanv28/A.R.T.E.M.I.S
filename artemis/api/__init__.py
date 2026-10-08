@@ -90,6 +90,81 @@ async def health(request: Request):
     return {"status": "ok"}
 
 
+@app.get("/status")
+async def status(request: Request):
+    """Richer dashboard status: readiness, configured LLM provider/model, Qdrant reachability.
+
+    provider/model_name reflect what's configured, not a verified-reachable LLM --
+    GroqClient/OpenAIClient have no ping method, and a real check would cost a paid call.
+    """
+    if not getattr(request.app.state, "ready", False):
+        reason = getattr(request.app.state, "ready_reason", "startup failed")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "ready": False,
+                "reason": reason,
+                "provider": None,
+                "model_name": None,
+                "qdrant_reachable": False,
+                "qdrant_error": None,
+            },
+        )
+    config = request.app.state.config
+    qdrant_reachable = True
+    qdrant_error = None
+    try:
+        request.app.state.registry.get("list_collections").callable()
+    except Exception as e:
+        qdrant_reachable = False
+        qdrant_error = str(e)
+    return {
+        "ready": True,
+        "reason": None,
+        "provider": config.provider,
+        "model_name": config.model_name,
+        "qdrant_reachable": qdrant_reachable,
+        "qdrant_error": qdrant_error,
+    }
+
+
+@app.get("/collections")
+async def collections(request: Request):
+    """List Qdrant collections with their recorded purpose, for the dashboard."""
+    if not getattr(request.app.state, "ready", False):
+        reason = getattr(request.app.state, "ready_reason", "startup failed")
+        return JSONResponse(status_code=503, content={"error": reason, "collections": []})
+    try:
+        result = request.app.state.registry.get("list_collections").callable()
+        purposes = result.get("purposes", {})
+        return {
+            "collections": [
+                {"name": name, "purpose": purposes.get(name)}
+                for name in result.get("collections", [])
+            ]
+        }
+    except Exception as e:
+        logger.exception("Collections list failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": str(e), "collections": []})
+
+
+@app.get("/collections/{name}")
+async def collection_detail(name: str, request: Request):
+    """Per-collection detail (points, vector config, segments) for the dashboard."""
+    if not getattr(request.app.state, "ready", False):
+        reason = getattr(request.app.state, "ready_reason", "startup failed")
+        return JSONResponse(status_code=503, content={"error": reason})
+    try:
+        return request.app.state.registry.get("get_collection_info").callable(
+            collection_name=name
+        )
+    except ValueError as e:
+        return JSONResponse(status_code=404, content={"error": str(e)})
+    except Exception as e:
+        logger.exception("Collection detail failed for %s: %s", name, e)
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.post("/query")
 async def query(request: Request, body: QueryBody):
     """Run the agent on the given query; optional message_history for multi-turn."""

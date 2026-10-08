@@ -180,11 +180,27 @@ def get_collection_info(
     
     try:
         collection_info = client.get_collection(collection_name)
+
+        # Single unnamed VectorParams (how this app's own create_collection() always
+        # creates collections) vs. a dict of named vectors (defensive: possible if a
+        # collection was created externally, outside this app).
+        vectors_cfg = collection_info.config.params.vectors
+        if isinstance(vectors_cfg, dict):
+            vector_size = {k: v.size for k, v in vectors_cfg.items()}
+            distance = {k: str(v.distance) for k, v in vectors_cfg.items()}
+        else:
+            vector_size = vectors_cfg.size
+            distance = str(vectors_cfg.distance)
+
         info = {
             "name": collection_name,
             "points_count": collection_info.points_count,
             "vectors_count": collection_info.vectors_count if hasattr(collection_info, 'vectors_count') else collection_info.points_count,
             "status": str(collection_info.status) if hasattr(collection_info, 'status') else "unknown",
+            "vector_size": vector_size,
+            "distance": distance,
+            "segments_count": getattr(collection_info, "segments_count", None),
+            "optimizer_status": str(collection_info.optimizer_status) if hasattr(collection_info, 'optimizer_status') else None,
         }
         logger.info(f"Collection '{collection_name}': {collection_info.points_count} points")
         return info

@@ -1,5 +1,12 @@
 import { API_BASE_URL } from "../lib/env";
-import type { QueryRequestBody, QueryResponse, HealthResponse } from "./types";
+import type {
+  QueryRequestBody,
+  QueryResponse,
+  HealthResponse,
+  StatusResponse,
+  CollectionsResponse,
+  CollectionDetailResponse,
+} from "./types";
 
 export class ApiError extends Error {
   status?: number;
@@ -41,4 +48,24 @@ export async function postQuery(body: QueryRequestBody): Promise<QueryResponse> 
 export async function getHealth(): Promise<HealthResponse> {
   const res = await fetch(`${API_BASE_URL}/health`);
   return (await res.json()) as HealthResponse;
+}
+
+// These three mirror getHealth(): the response body is self-describing even on
+// 503/500 (e.g. {ready: false, reason: "..."}), so callers read the body's own
+// fields rather than branching on res.ok. A thrown error here means the fetch
+// itself failed (network/CORS), not an application-level problem.
+
+export async function getStatus(): Promise<StatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/status`);
+  return (await res.json()) as StatusResponse;
+}
+
+export async function getCollections(): Promise<CollectionsResponse> {
+  const res = await fetch(`${API_BASE_URL}/collections`);
+  return (await res.json()) as CollectionsResponse;
+}
+
+export async function getCollectionDetail(name: string): Promise<CollectionDetailResponse> {
+  const res = await fetch(`${API_BASE_URL}/collections/${encodeURIComponent(name)}`);
+  return (await res.json()) as CollectionDetailResponse;
 }
