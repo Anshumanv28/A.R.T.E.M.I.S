@@ -5,9 +5,8 @@ Unpriced models return None rather than a fabricated number. Verified 2026-10-07
 Groq's llama-3.3-70b-versatile moved to enterprise-only "Contact Sales" pricing
 on 2026-08-26. Verified again 2026-10-26: that model has since been removed from
 Groq's catalog entirely (404, not just unpriced) -- the repo's default Groq model
-was updated to openai/gpt-oss-120b, which also has no entry here since its public
-per-token rate hasn't been verified. Run the eval suite against gpt-4o-mini
-(--provider openai --model gpt-4o-mini) to get real dollar figures.
+was updated to openai/gpt-oss-120b. Verified 2026-10-26 against
+console.groq.com/docs/models: $0.15/1M input, $0.60/1M output.
 """
 
 from typing import Dict, Optional, TypedDict
@@ -22,6 +21,8 @@ class ModelRate(TypedDict):
 MODEL_PRICING_USD_PER_1K: Dict[str, Optional[ModelRate]] = {
     "gpt-4o-mini": {"prompt_usd_per_1k": 0.00015, "completion_usd_per_1k": 0.0006},
     "gpt-4o": {"prompt_usd_per_1k": 0.0025, "completion_usd_per_1k": 0.01},
+    # console.groq.com/docs/models, verified 2026-10-26: $0.15/1M input, $0.60/1M output.
+    "openai/gpt-oss-120b": {"prompt_usd_per_1k": 0.00015, "completion_usd_per_1k": 0.0006},
     # No public pricing since 2026-08-26 (enterprise/Contact Sales only).
     "llama-3.3-70b-versatile": None,
 }
