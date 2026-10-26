@@ -66,6 +66,13 @@ def tool_node(state: AgentState, registry: ToolRegistry) -> AgentState:
     try:
         result = descriptor.callable(**tool_args)
         ok = True
+        if isinstance(result, dict) and result.get("ok") is False:
+            # Several tools (ingest_file, ingest_directory, suggest_ingest_options, ...)
+            # report failure as a normal {"ok": False, "error": ...} return value instead
+            # of raising. Without this, tool_calls/tool_calls_summary would report "ok"
+            # for a call that actually failed, and the planner would confidently tell the
+            # user an ingest succeeded when it didn't.
+            ok = False
         if tool_name == "search_documents" and isinstance(result, list) and len(result) == 0:
             logger.info("search_documents returned 0 results (empty collection or no matching documents)")
     except Exception as e:

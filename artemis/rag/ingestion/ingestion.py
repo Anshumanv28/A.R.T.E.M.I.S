@@ -43,6 +43,7 @@ ingest_file("data.csv", FileType.CSV, indexer)
 ```
 """
 
+import inspect
 from pathlib import Path
 from typing import Optional, Any, Union
 
@@ -206,12 +207,15 @@ def ingest_file(
         )
     
     chunker = CHUNKERS[strategy]
-    
+
     # Step 3: Chunk the loaded content
-    # Agentic chunker only accepts chunk_size and llm_client; others (e.g. overlap) must be omitted
-    kwargs_for_chunker = dict(chunk_kwargs)
-    if strategy == ChunkStrategy.AGENTIC:
-        kwargs_for_chunker = {k: v for k, v in kwargs_for_chunker.items() if k in ("chunk_size", "llm_client")}
+    # Each chunker has its own strict (non-**kwargs) signature, and callers (e.g.
+    # suggest_ingest_options) pass a generic set of defaults like chunk_size/overlap
+    # regardless of strategy. Filter to only the parameters this chunker actually
+    # accepts so an unsupported default (e.g. 'overlap' for semantic_chunker, which
+    # has no overlap concept) doesn't raise a TypeError instead of chunking.
+    accepted_params = set(inspect.signature(chunker).parameters)
+    kwargs_for_chunker = {k: v for k, v in chunk_kwargs.items() if k in accepted_params}
     logger.debug(f"Chunking content using {strategy.value} strategy")
     try:
         # CSV chunker needs special handling (takes DataFrame + optional schema + csv_path)

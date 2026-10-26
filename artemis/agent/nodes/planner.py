@@ -253,6 +253,17 @@ def planner_node(
                         line += f", collection_name={cname}"
                     if purpose:
                         line += f", purpose={purpose!r}"
+                elif name == "suggest_ingest_options":
+                    # Surface the recommended options so the next planner step can actually
+                    # build the ingest_file/ingest_directory call the prompt tells it to make.
+                    # Without this, the model only sees "ok" and has nothing to act on.
+                    fields = [
+                        "path_type", "path", "directory_path", "file_type", "file_extension",
+                        "chunk_strategy", "chunk_size", "overlap", "schema",
+                    ]
+                    details = [f"{f}={result[f]!r}" for f in fields if result.get(f) is not None]
+                    if details:
+                        line += ", " + ", ".join(details)
             prior_context += line + "\n"
     conv_block = _format_message_history(state.get("message_history"))
     user_prompt = f"{conv_block}Query: {query}{prior_context}\n\nClassify intent and respond with JSON only."
@@ -301,43 +312,40 @@ def planner_node(
                         "reasoning": "Search already returned results; answering with available context.",
                     }
                     break
-        # Block repeated list_collections (one call is enough)
-        if validated.get("intent") == "tool" and validated.get("tool_name") == "list_collections":
-            for tc in tool_calls:
-                if tc.get("tool_name") == "list_collections" and tc.get("ok") and tc.get("result") is not None:
-                    # If we have list_collections but no search yet, and the user asked a content question, run search instead of direct
-                    has_search = any(t.get("tool_name") == "search_documents" for t in tool_calls)
-                    query = (state.get("query") or "").strip().lower()
-                    content_question = not has_search and (
-                        "tell me about" in query or "what is" in query or "how does" in query
-                        or "according to" in query or "based on the" in query or "what can you" in query
-                    )
-                    if content_question:
-                        res = tc.get("result")
-                        collections = res.get("collections", res) if isinstance(res, dict) else (res if isinstance(res, list) else [])
-                        coll = collections[0] if collections else "artemis_user_docs"
-                        logger.info(
-                            "Blocking repeated list_collections; forcing search_documents so RAG lookup runs"
-                        )
-                        validated = {
-                            **validated,
-                            "intent": "tool",
-                            "tool_name": "search_documents",
-                            "tool_args": {"query": state.get("query", ""), "collection_name": coll},
-                            "reasoning": "Collections already listed; running search_documents to retrieve document content for the answer.",
-                        }
-                    else:
-                        logger.info(
-                            "Blocking repeated list_collections; forcing intent=direct"
-                        )
-                        validated = {
-                            **validated,
-                            "intent": "direct",
-                            "tool_name": None,
-                            "tool_args": None,
-                            "reasoning": "Collections already listed; answer with available context.",
-                        }
-                    break
+        # list_collections never returns document content. If this agent can search
+        # (search_documents is in its registry) and has already called list_collections
+        # but hasn't searched yet, force a search rather than letting the planner either
+        # repeat list_collections or go direct having seen only collection names. This is a
+        # structural check (not a query-keyword guess) so it covers any phrasing of a content
+        # question, not just the handful of substrings an earlier version special-cased.
+        list_collections_call = next(
+            (tc for tc in tool_calls if tc.get("tool_name") == "list_collections" and tc.get("ok") and tc.get("result") is not None),
+            None,
+        )
+        has_search = any(tc.get("tool_name") == "search_documents" and tc.get("ok") for tc in tool_calls)
+        search_available = any(t.get("name") == "search_documents" for t in registry.list_tools())
+        about_to_repeat_list_collections = (
+            validated.get("intent") == "tool" and validated.get("tool_name") == "list_collections"
+        )
+        if (
+            list_collections_call is not None
+            and not has_search
+            and search_available
+            and (validated.get("intent") == "direct" or about_to_repeat_list_collections)
+        ):
+            res = list_collections_call.get("result")
+            collections = res.get("collections", res) if isinstance(res, dict) else (res if isinstance(res, list) else [])
+            coll = collections[0] if collections else "artemis_user_docs"
+            logger.info(
+                "list_collections seen without search_documents; forcing search_documents so RAG lookup runs"
+            )
+            validated = {
+                **validated,
+                "intent": "tool",
+                "tool_name": "search_documents",
+                "tool_args": {"query": state.get("query", ""), "collection_name": coll},
+                "reasoning": "Collections already listed; running search_documents to retrieve document content for the answer.",
+            }
         # Block duplicate ingest_directory only when the previous call actually succeeded (ingested_count > 0)
         if validated.get("intent") == "tool" and validated.get("tool_name") == "ingest_directory":
             new_args = validated.get("tool_args") or {}
