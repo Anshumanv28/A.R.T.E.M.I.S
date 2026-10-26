@@ -11,6 +11,22 @@
 
 ---
 
+## Screenshots
+
+**Chat with Supervisor trace** — a query routed to the `collection_management` sub-agent, with the expanded tool-call trace showing the real `list_collections` result.
+
+![Chat with Supervisor trace](docs/screenshots/chat-supervisor-trace.jpg)
+
+**Ops dashboard** — live system status, collections, and the latest automated eval run (routing accuracy, tool-selection accuracy, token usage, cost).
+
+![Ops dashboard](docs/screenshots/ops-dashboard.jpg)
+
+**API docs (Swagger/OpenAPI)** — the FastAPI backend's interactive API reference.
+
+![Swagger API docs](docs/screenshots/api-swagger.jpg)
+
+---
+
 ## What is A.R.T.E.M.I.S.?
 
 A.R.T.E.M.I.S. is a **Supervisor-based multi-agent RAG framework** built on LangGraph. It takes a user query, classifies it with a lightweight LLM call, and dispatches it to the right specialist agent — each with its own focused toolset and system prompt.
