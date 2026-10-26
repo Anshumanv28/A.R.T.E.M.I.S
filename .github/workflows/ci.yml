@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Run tests
+        # No API keys or QDRANT_URL are configured here on purpose: the suite is
+        # designed to skip tests that need a live LLM/Qdrant/dataset rather than
+        # fail (see tests/README.md and tests/test_integration.py's skipif).
+        run: pytest tests/ -v

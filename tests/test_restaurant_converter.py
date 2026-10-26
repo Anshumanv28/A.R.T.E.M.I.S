@@ -144,8 +144,11 @@ def test_conversion():
         return None, None
 
 
-def test_retriever_indexing(doc_paths, metadata_path):
+def test_retriever_indexing():
     """Test indexing and retrieval (reads files and deletes them)."""
+    # doc_paths/metadata_path aren't pytest fixtures -- test_conversion() is written
+    # to double as a plain value-returning helper (see its own return statements).
+    doc_paths, metadata_path = test_conversion()
     if not doc_paths or not metadata_path:
         print("Skipping indexing/retrieval test (conversion failed)")
         return

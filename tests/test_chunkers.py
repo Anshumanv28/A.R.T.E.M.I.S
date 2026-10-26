@@ -137,9 +137,11 @@ class TestFixedOverlapChunker:
         assert len(documents) > 0
         assert len(metadata) > 0
         assert len(documents) == len(metadata)
-        # Check overlap (first chunk end should appear in second chunk start)
+        # Check overlap (first chunk end should appear in second chunk start).
+        # Stripped because the chunker snaps to word boundaries, so the exact
+        # leading/trailing character of a fixed-width slice isn't guaranteed.
         if len(documents) > 1:
-            overlap_text = documents[0][-20:]
+            overlap_text = documents[0][-20:].strip()
             assert overlap_text in documents[1][:40]
     
     def test_fixed_overlap_chunker_empty_text(self):

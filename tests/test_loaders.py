@@ -84,7 +84,7 @@ class TestCSVLoader:
             assert len(df) == 2
             assert list(df.columns) == ["name", "value"]
             assert df.iloc[0]["name"] == "Test1"
-            assert df.iloc[0]["value"] == "100"
+            assert df.iloc[0]["value"] == 100  # pandas infers int64 for a numeric column
         finally:
             csv_path.unlink(missing_ok=True)
     
