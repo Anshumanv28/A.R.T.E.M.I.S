@@ -1,0 +1,74 @@
+[
+  {
+    "id": "suggest_ingest_docs_no_ingest",
+    "query": "What are the best options for ingesting the docs folder? Don't ingest, just suggest.",
+    "expected_agent": "ingestion",
+    "expected_tool_sequence": ["suggest_ingest_options"],
+    "forbidden_tools": ["ingest_file", "ingest_directory"],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "suggest_settings_readme_no_ingest",
+    "query": "Suggest settings for ingesting README.md. I don't want to ingest yet.",
+    "expected_agent": "ingestion",
+    "expected_tool_sequence": ["suggest_ingest_options"],
+    "forbidden_tools": ["ingest_file", "ingest_directory"],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "smart_ingest_readme_file",
+    "query": "Ingest README.md with the right strategy for markdown.",
+    "expected_agent": "ingestion",
+    "expected_tool_sequence": ["suggest_ingest_options", "ingest_file"],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": true
+  },
+  {
+    "id": "combined_flow_ingest_docs_dir",
+    "query": "Ingest the files in the docs directory. Use whatever chunking and options work best for that content.",
+    "expected_agent": "ingestion",
+    "expected_tool_sequence": ["suggest_ingest_options", "ingest_directory"],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": true
+  },
+  {
+    "id": "rag_options_query",
+    "query": "What search modes and chunk strategies are available?",
+    "expected_agent": "rag_search",
+    "expected_tool_sequence": ["get_rag_options"],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "search_system_docs_rag_chunking",
+    "query": "Search the knowledge base for how RAG chunking works.",
+    "expected_agent": "rag_search",
+    "expected_tool_sequence": ["search_documents"],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "list_collections_query",
+    "query": "What collections exist in the knowledge base right now?",
+    "expected_agent": "collection_management",
+    "expected_tool_sequence": ["list_collections"],
+    "forbidden_tools": ["delete_collection", "clear_collection"],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "direct_greeting_no_tools",
+    "query": "Hi, how are you?",
+    "expected_agent": "direct",
+    "expected_tool_sequence": [],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": false
+  }
+]

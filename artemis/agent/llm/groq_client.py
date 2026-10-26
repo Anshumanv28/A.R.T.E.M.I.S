@@ -7,6 +7,7 @@ Provides a simple interface for generating responses using Groq API.
 from typing import Optional, Dict, Any
 from groq import Groq
 
+from artemis.agent.llm import usage_tracker
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
@@ -19,13 +20,13 @@ class GroqClient:
     Provides a unified generate() interface that matches other LLM clients.
     """
     
-    def __init__(self, api_key: str, model_name: str = "llama-3.3-70b-versatile"):
+    def __init__(self, api_key: str, model_name: str = "openai/gpt-oss-120b"):
         """
         Initialize Groq client.
-        
+
         Args:
             api_key: Groq API key
-            model_name: Model name to use (default: llama-3.3-70b-versatile)
+            model_name: Model name to use (default: openai/gpt-oss-120b)
         """
         self.client = Groq(api_key=api_key)
         self.model_name = model_name
@@ -74,6 +75,7 @@ class GroqClient:
                 **kwargs
             )
             
+            usage_tracker.record(getattr(response, "usage", None), model_name=self.model_name)
             result = response.choices[0].message.content
             logger.debug(f"Generated response ({len(result)} chars)")
             return result

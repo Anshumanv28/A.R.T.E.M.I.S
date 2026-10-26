@@ -24,7 +24,7 @@ class AgentConfig:
         openai_api_key: OpenAI API key (from env if not provided)
     """
     provider: Literal["groq", "openai"] = "groq"
-    model_name: str = "llama-3.3-70b-versatile"
+    model_name: str = "openai/gpt-oss-120b"
     max_tokens: int = 2048
     temperature: float = 0.7
     retrieval_k: int = 5
@@ -64,7 +64,7 @@ class AgentConfig:
         """
         return cls(
             provider=kwargs.get("provider", os.getenv("ARTEMIS_LLM_PROVIDER", "groq")),
-            model_name=kwargs.get("model_name", os.getenv("ARTEMIS_LLM_MODEL", "llama-3.3-70b-versatile")),
+            model_name=kwargs.get("model_name", os.getenv("ARTEMIS_LLM_MODEL", "openai/gpt-oss-120b")),
             max_tokens=int(kwargs.get("max_tokens", os.getenv("ARTEMIS_MAX_TOKENS", "2048"))),
             temperature=float(kwargs.get("temperature", os.getenv("ARTEMIS_TEMPERATURE", "0.7"))),
             retrieval_k=int(kwargs.get("retrieval_k", os.getenv("ARTEMIS_RETRIEVAL_K", "5"))),

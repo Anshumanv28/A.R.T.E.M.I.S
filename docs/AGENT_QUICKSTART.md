@@ -144,7 +144,7 @@ There is no top-level `retrieved_docs`; retrieved content appears inside the rel
 
 ```bash
 ARTEMIS_LLM_PROVIDER=groq
-ARTEMIS_LLM_MODEL=llama-3.3-70b-versatile
+ARTEMIS_LLM_MODEL=openai/gpt-oss-120b
 ARTEMIS_MAX_TOKENS=2048
 ARTEMIS_TEMPERATURE=0.7
 ARTEMIS_RETRIEVAL_K=5

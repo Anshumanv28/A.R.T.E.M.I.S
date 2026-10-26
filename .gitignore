@@ -190,6 +190,8 @@ datasets/
 !frontend/package.json
 !frontend/package-lock.json
 !frontend/tsconfig*.json
+# ...and the eval golden dataset, which is checked-in test fixture, not generated data
+!tests/eval/golden_dataset.json
 # ...and frontend source (caught by the Python-packaging lib/ rule above)
 !frontend/src/lib/
 !frontend/src/lib/*.ts

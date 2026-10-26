@@ -7,6 +7,7 @@ Provides a simple interface for generating responses using OpenAI API.
 from typing import Optional, Dict, Any
 from openai import OpenAI
 
+from artemis.agent.llm import usage_tracker
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
@@ -74,6 +75,7 @@ class OpenAIClient:
                 **kwargs
             )
             
+            usage_tracker.record(getattr(response, "usage", None), model_name=self.model_name)
             result = response.choices[0].message.content
             logger.debug(f"Generated response ({len(result)} chars)")
             return result
