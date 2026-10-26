@@ -2,8 +2,10 @@
 HTTP API for ARTEMIS: same config and agent as the CLI, separate entrypoint.
 """
 
+import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request
@@ -163,6 +165,60 @@ async def collection_detail(name: str, request: Request):
     except Exception as e:
         logger.exception("Collection detail failed for %s: %s", name, e)
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/eval/latest")
+async def eval_latest(request: Request):
+    """Most recent eval report from eval_reports/ (written by scripts/eval_agent.py), trimmed for the dashboard.
+
+    No reports yet is a normal first-run state, not a server error: 404 with
+    metrics/cases null/empty rather than 500, so the dashboard can render an
+    "nothing run yet" empty state instead of an error banner.
+    """
+    from artemis.eval.report import DEFAULT_REPORTS_DIR
+
+    reports_dir = Path(DEFAULT_REPORTS_DIR)
+    report_files = sorted(reports_dir.glob("eval_report_*.json")) if reports_dir.is_dir() else []
+    if not report_files:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "No eval reports found. Run scripts/eval_agent.py first.",
+                "report_file": None,
+                "generated_at": None,
+                "metrics": None,
+                "cases": [],
+            },
+        )
+    # Filenames are eval_report_<UTC timestamp>.json, so lexicographic sort is chronological.
+    latest_path = report_files[-1]
+    try:
+        with open(latest_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
+    except Exception as e:
+        logger.exception("Failed to read eval report %s: %s", latest_path, e)
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "report_file": latest_path.name, "generated_at": None, "metrics": None, "cases": []},
+        )
+
+    cases = [
+        {
+            "case_id": r.get("case_id"),
+            "success": r.get("success"),
+            "failure_reason": r.get("failure_reason"),
+            "expected_agent": r.get("expected_agent"),
+            "actual_agent": r.get("actual_agent"),
+            "duration_s": r.get("duration_s"),
+        }
+        for r in report.get("results", [])
+    ]
+    return {
+        "report_file": latest_path.name,
+        "generated_at": report.get("generated_at"),
+        "metrics": report.get("metrics"),
+        "cases": cases,
+    }
 
 
 @app.post("/query")

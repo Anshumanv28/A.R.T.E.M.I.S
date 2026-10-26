@@ -459,7 +459,7 @@ body {
 
 .status-card,
 .collections-list-card,
-.eval-placeholder-card {
+.eval-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -468,13 +468,14 @@ body {
 
 .status-card h2,
 .collections-list-card h2,
-.eval-placeholder-card h2 {
+.eval-card h2 {
   margin: 0 0 10px;
   font-size: 1rem;
 }
 
 .status-loading,
-.collections-empty {
+.collections-empty,
+.eval-empty {
   color: var(--text-faint);
   font-size: 0.9rem;
   margin: 0;
@@ -559,15 +560,49 @@ body {
   color: var(--danger);
 }
 
-.eval-placeholder-card p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.eval-placeholder-card code {
+.eval-empty code {
   background: var(--code-bg);
   border-radius: 4px;
   padding: 0.1em 0.35em;
   font-size: 0.85em;
+  word-break: break-word;
+}
+
+.eval-failure-breakdown {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.eval-case-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eval-case-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.eval-case-id {
+  word-break: break-word;
+}
+
+.eval-case-reason {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}
+
+.eval-report-meta {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-faint);
 }

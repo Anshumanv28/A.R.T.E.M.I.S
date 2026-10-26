@@ -6,6 +6,7 @@ import type {
   StatusResponse,
   CollectionsResponse,
   CollectionDetailResponse,
+  EvalLatestResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -68,4 +69,9 @@ export async function getCollections(): Promise<CollectionsResponse> {
 export async function getCollectionDetail(name: string): Promise<CollectionDetailResponse> {
   const res = await fetch(`${API_BASE_URL}/collections/${encodeURIComponent(name)}`);
   return (await res.json()) as CollectionDetailResponse;
+}
+
+export async function getEvalLatest(): Promise<EvalLatestResponse> {
+  const res = await fetch(`${API_BASE_URL}/eval/latest`);
+  return (await res.json()) as EvalLatestResponse;
 }

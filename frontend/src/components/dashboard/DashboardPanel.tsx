@@ -1,18 +1,20 @@
-import { getStatus, getCollections } from "../../api/client";
+import { getStatus, getCollections, getEvalLatest } from "../../api/client";
 import { usePolling } from "../../hooks/usePolling";
 import { StatusCard } from "./StatusCard";
 import { CollectionsList } from "./CollectionsList";
-import { EvalPlaceholder } from "./EvalPlaceholder";
+import { EvalCard } from "./EvalCard";
 
 export function DashboardPanel() {
   // Independent poll instances -- a slow collections fetch should never
   // block the status badge from updating.
   const status = usePolling(getStatus);
   const collections = usePolling(getCollections);
+  const evalLatest = usePolling(getEvalLatest);
 
   const refreshAll = () => {
     status.refresh();
     collections.refresh();
+    evalLatest.refresh();
   };
 
   return (
@@ -29,7 +31,7 @@ export function DashboardPanel() {
           error={collections.error}
           loading={collections.loading}
         />
-        <EvalPlaceholder />
+        <EvalCard data={evalLatest.data} error={evalLatest.error} loading={evalLatest.loading} />
       </div>
     </div>
   );

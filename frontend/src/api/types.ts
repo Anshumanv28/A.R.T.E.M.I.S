@@ -57,3 +57,35 @@ export interface CollectionDetailResponse {
   optimizer_status: string | null;
   error?: string;
 }
+
+export interface EvalMetrics {
+  total_cases: number;
+  task_success_rate: number;
+  routing_accuracy: number;
+  tool_selection_accuracy: number;
+  avg_step_count: number;
+  avg_duration_s: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  total_tokens: number;
+  total_cost_usd: number | null;
+  pricing_unavailable_count: number;
+  failure_breakdown: Record<string, number>;
+}
+
+export interface EvalCaseSummary {
+  case_id: string;
+  success: boolean;
+  failure_reason: string | null;
+  expected_agent: string;
+  actual_agent: string | null;
+  duration_s: number;
+}
+
+export interface EvalLatestResponse {
+  report_file: string | null;
+  generated_at: string | null;
+  metrics: EvalMetrics | null;
+  cases: EvalCaseSummary[];
+  error?: string;
+}
