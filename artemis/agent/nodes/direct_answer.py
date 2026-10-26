@@ -12,9 +12,36 @@ from artemis.agent.config import AgentConfig
 from artemis.agent.prompts import load_direct_answer_prompt
 from artemis.agent.llm.groq_client import GroqClient
 from artemis.agent.llm.openai_client import OpenAIClient
+from artemis.agent.tools.registry import ToolRegistry
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
+
+# Phrases that mean the user is asking about tools/capabilities rather than
+# asking the agent to do something -- shared so every "answer directly, no
+# tool called" path (Supervisor-level and every sub-agent's own direct branch)
+# gets the same tool-list context instead of only the Supervisor-level one.
+_CAPABILITY_QUESTION_PHRASES = (
+    "tool", "tools", "capabilities", "what can you", "what do you have",
+    "what are your", "how do you work", "what can the system", "available",
+    "list of ", "what options", "what are the ",
+)
+
+
+def is_capability_question(query: str) -> bool:
+    """True if the query is asking about tools/capabilities rather than requesting an action."""
+    q = (query or "").strip().lower()
+    return any(phrase in q for phrase in _CAPABILITY_QUESTION_PHRASES)
+
+
+def build_capability_tool_summary(registry: ToolRegistry) -> str:
+    """Render registry.list_tools() as the 'Available tools (name + description)' block."""
+    lines = ["Available tools (name + description):"]
+    for t in registry.list_tools():
+        name = t.get("name", "?")
+        desc = (t.get("description") or "").strip()
+        lines.append(f"- {name}: {desc}")
+    return "\n".join(lines)
 
 
 # Max chars per document chunk in context to avoid Groq 413 (request too large)
@@ -142,14 +169,32 @@ def _build_tool_context(state: AgentState) -> str:
     return "\n".join(parts).strip()
 
 
-def direct_answer_node(state: AgentState, config: AgentConfig) -> AgentState:
+def direct_answer_node(
+    state: AgentState, config: AgentConfig, registry: Optional[ToolRegistry] = None
+) -> AgentState:
     """
     Generate final answer: either direct (no tools) or synthesize from tool results.
 
     When tool_calls is non-empty, uses pre-summarized tool_calls_summary and
     formatted tool results (e.g. search docs) as context instead of raw dump.
+
+    registry: when the query looks like a tools/capabilities question and no
+    tool was actually called (tool_calls and tool_calls_summary both empty),
+    inject the (caller's, already scope-filtered) tool list so the "no
+    context" prompt's instruction to "describe the tools given in context"
+    has something to describe. Without this, any direct answer reached from
+    inside a sub-agent (not just Supervisor's own top-level direct) would
+    promise a tool list that was never provided.
     """
     query = state.get("query", "")
+
+    if (
+        registry is not None
+        and not state.get("tool_calls")
+        and not state.get("tool_calls_summary")
+        and is_capability_question(query)
+    ):
+        state = {**state, "tool_calls_summary": build_capability_tool_summary(registry)}
 
     if not query:
         logger.warning("Empty query in direct answer node")

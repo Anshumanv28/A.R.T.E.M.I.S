@@ -12,7 +12,11 @@ from artemis.agent.config import AgentConfig
 from artemis.agent.context import SystemContext, load_system_context
 from artemis.agent.llm.groq_client import GroqClient
 from artemis.agent.llm.openai_client import OpenAIClient
-from artemis.agent.nodes.direct_answer import direct_answer_node
+from artemis.agent.nodes.direct_answer import (
+    build_capability_tool_summary,
+    direct_answer_node,
+    is_capability_question,
+)
 from artemis.agent.prompts.supervisor import SupervisorPrompt
 from artemis.agent.state import AgentState
 from artemis.agent.tools.registry import ToolRegistry
@@ -177,24 +181,9 @@ class Supervisor:
 
     def _direct_answer(self, query: str, message_history: Optional[list] = None) -> AgentState:
         # Only inject tool list when the user is asking about tools/capabilities; otherwise keep replies short (e.g. "hi" -> brief greeting).
-        q = (query or "").strip().lower()
-        tool_related = any(
-            phrase in q
-            for phrase in (
-                "tool", "tools", "capabilities", "what can you", "what do you have",
-                "what are your", "how do you work", "what can the system", "available",
-                "list of ", "what options", "what are the ",
-            )
+        tool_calls_summary = (
+            build_capability_tool_summary(self.registry) if is_capability_question(query) else None
         )
-        tool_calls_summary = None
-        if tool_related:
-            tool_list = self.registry.list_tools()
-            lines = ["Available tools (name + description):"]
-            for t in tool_list:
-                name = t.get("name", "?")
-                desc = (t.get("description") or "").strip()
-                lines.append(f"- {name}: {desc}")
-            tool_calls_summary = "\n".join(lines) if lines else None
 
         state: AgentState = {
             "query": query,
@@ -211,7 +200,7 @@ class Supervisor:
             "confidence": 1.0,
             "reasoning": "Direct answer — no tools needed.",
         }
-        return direct_answer_node(state, self.config)
+        return direct_answer_node(state, self.config, registry=self.registry)
 
     def invoke(
         self,

@@ -74,7 +74,7 @@ class AgentGraph:
         )
         workflow.add_node(
             "direct_answer",
-            lambda state: direct_answer_node(state, self.config),
+            lambda state: direct_answer_node(state, self.config, registry=self.registry),
         )
 
         workflow.set_entry_point("planner")
