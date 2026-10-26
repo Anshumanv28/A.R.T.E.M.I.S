@@ -10,7 +10,10 @@ export default function App() {
   return (
     <div className={`app ${tab === "dashboard" ? "app--wide" : ""}`}>
       <header className="app-header">
-        <h1>A.R.T.E.M.I.S</h1>
+        <div className="app-brand">
+          <h1>A.R.T.E.M.I.S</h1>
+          <span className="app-tagline">Supervisor-routed multi-agent RAG</span>
+        </div>
         <nav className="tab-switch">
           <button
             type="button"

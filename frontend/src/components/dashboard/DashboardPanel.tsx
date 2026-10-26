@@ -17,12 +17,38 @@ export function DashboardPanel() {
     evalLatest.refresh();
   };
 
+  const ready = status.data?.ready ?? false;
+  const collectionsCount = collections.data?.collections.length ?? null;
+  const successRate = evalLatest.data?.metrics?.task_success_rate ?? null;
+
   return (
     <div className="dashboard-panel">
       <div className="dashboard-toolbar">
         <button type="button" className="dashboard-refresh-button" onClick={refreshAll}>
           Refresh
         </button>
+      </div>
+      <div className="stat-strip">
+        <div className="stat-tile">
+          <span className="stat-tile-label">Backend</span>
+          <span className="stat-tile-value">
+            <span
+              className="status-dot"
+              style={{ backgroundColor: ready ? "var(--success)" : "var(--danger)" }}
+            />
+            {status.loading && !status.data ? "Checking…" : ready ? "Online" : "Offline"}
+          </span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-tile-label">Collections</span>
+          <span className="stat-tile-value">{collectionsCount ?? "—"}</span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-tile-label">Latest eval success</span>
+          <span className="stat-tile-value">
+            {successRate != null ? `${Math.round(successRate * 100)}%` : "—"}
+          </span>
+        </div>
       </div>
       <div className="dashboard-grid">
         <StatusCard data={status.data} error={status.error} loading={status.loading} />

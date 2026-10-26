@@ -31,12 +31,25 @@ export function EvalCard({ data, error, loading }: Props) {
       )}
       {metrics && (
         <>
+          <div className="eval-score-row">
+            <span className="eval-score-value">{formatPct(metrics.task_success_rate)}</span>
+            <span className="eval-score-fraction">
+              {cases.filter((c) => c.success).length}/{metrics.total_cases} cases passed
+            </span>
+          </div>
+          <div className="eval-bar-track">
+            <div
+              className={`eval-bar-fill ${
+                metrics.task_success_rate >= 0.8
+                  ? ""
+                  : metrics.task_success_rate >= 0.5
+                    ? "degraded"
+                    : "poor"
+              }`}
+              style={{ width: `${Math.round(metrics.task_success_rate * 100)}%` }}
+            />
+          </div>
           <dl className="status-grid">
-            <dt>Success rate</dt>
-            <dd>
-              {formatPct(metrics.task_success_rate)} ({cases.filter((c) => c.success).length}/
-              {metrics.total_cases})
-            </dd>
             <dt>Routing accuracy</dt>
             <dd>{formatPct(metrics.routing_accuracy)}</dd>
             <dt>Tool-selection accuracy</dt>
