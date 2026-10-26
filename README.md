@@ -56,6 +56,12 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 - ✅ **run_agent_v2()** — Supervisor entrypoint, backwards-compatible with v1
 - ✅ **--v2 CLI flag** — opt-in to Supervisor architecture
 
+### Tooling & evaluation
+
+- ✅ **MCP server** (`artemis/mcp/`) — exposes the same `ToolRegistry` over the Model Context Protocol with least-privilege scopes (`rag_search`, `ingestion`, `collection_mgmt`) that reuse the sub-agents' own tool allow-lists verbatim; requesting an out-of-scope tool returns an explicit error instead of silently succeeding
+- ✅ **Agent eval harness** (`artemis/eval/`, `scripts/eval_agent.py`) — runs a golden dataset end-to-end against the live Supervisor, reporting task success rate, routing/tool-selection accuracy, step count, and per-case token/cost usage; re-run after any planner or prompt change to catch regressions
+- ✅ **Ops dashboard** (Dashboard tab in `frontend/`) — read-only system status, Qdrant collection browser, and eval metrics (success rate, failure breakdown, per-case pass/fail) backed by `GET /status`, `/collections`, `/eval/latest`
+
 ### Also included
 
 - ✅ **Legacy v1 agent** (AgentGraph, run_agent) — still works, not removed
@@ -139,6 +145,31 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 
 CORS is locked down by default (only `http://localhost:5173`, the Vite dev server, is allowed). To call the API from a browser-based frontend hosted elsewhere, set `ARTEMIS_CORS_ORIGINS` (comma-separated) — see `.env.example`.
 
+### Run the MCP server
+
+Exposes the same registry of tools over MCP's stdio transport, scoped per role:
+
+```bash
+# Default scope is rag_search; see artemis/mcp/scopes.py for the full list
+python -m artemis.mcp --scope rag_search
+python -m artemis.mcp --scope ingestion
+python -m artemis.mcp --scope collection_mgmt
+```
+
+Point any MCP-compatible client (Claude Desktop, an MCP Inspector, etc.) at this command as a stdio server. Each scope only exposes the tools that scope's sub-agent uses — e.g. `rag_search` never exposes `delete_collection`.
+
+### Run agent evals
+
+```bash
+# Safe default: skips the two cases that actually call ingest_file/ingest_directory
+python scripts/eval_agent.py --dataset tests/eval/golden_dataset.json --skip-mutating
+
+# Full suite (including mutating ingest cases) -- disposable Qdrant only, see tests/eval/README.md
+python scripts/eval_agent.py --dataset tests/eval/golden_dataset.json
+```
+
+Each run prints task success rate, routing/tool-selection accuracy, step counts, and token/cost totals, then writes a timestamped JSON report to `eval_reports/` (gitignored). The dashboard's Eval card reads the latest report via `GET /eval/latest`.
+
 ### Live demo
 
 - **Demo base URL:** `http://54.87.62.83:8000`
@@ -151,6 +182,8 @@ The demo is served over **HTTP** (no HTTPS). It is best-effort: the instance may
 ### Frontend
 
 A React + Vite chat UI lives in `frontend/`. It calls `POST /query` and shows each answer's `routed_to` agent and `tool_calls` as an expandable trace — a visual demo of the Supervisor routing.
+
+A second **Dashboard tab** polls `GET /status`, `/collections`, and `/eval/latest` to show system health, a Qdrant collection browser, and the latest eval run's metrics. It's read-only by design — mutating actions (create/delete/clear a collection) stay chat-only via the `collection_mgmt` agent.
 
 ```bash
 cd frontend
@@ -269,12 +302,17 @@ artemis/
 │   ├── graph.py               # AgentGraph (v1, legacy)
 │   ├── run.py                 # run_agent(), run_agent_v2(), CLI
 │   └── prompts/               # Per-agent prompt classes
+├── mcp/                       # MCP server: scopes.py, adapter.py, server.py (python -m artemis.mcp)
+├── eval/                      # Eval harness: dataset.py, runner.py, metrics.py, report.py
 └── rag/
     ├── core/                  # Indexer, Retriever, Embedder
     └── ingestion/
         ├── chunkers/          # fixed, semantic, agentic, csv_row...
         ├── loaders/           # PDF, DOCX, MD, CSV loaders
         └── converters/        # CSV schema converters
+
+scripts/eval_agent.py          # Eval CLI entrypoint
+tests/eval/golden_dataset.json # 8-case golden dataset for the eval harness
 ```
 
 ---
@@ -312,6 +350,8 @@ See CONTRIBUTING.md once it's added (tracked in #2).
 | LLM providers | Groq · OpenAI |
 | Vector database | Qdrant |
 | Embeddings | Sentence Transformers |
+| Tool protocol | MCP (Model Context Protocol) |
+| Agent evaluation | Custom golden-dataset harness (`artemis/eval/`) |
 | Code style | Black |
 
 ---
