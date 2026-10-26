@@ -1,10 +1,15 @@
-"""Quick test to verify colorama is working with the logger."""
+"""
+Manual check that colorama is working with the logger (visual inspection, not
+a pytest test -- there's nothing to assert, the point is to look at the output).
+
+Usage: python scripts/check_colorama.py
+"""
 
 import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).parent
+# Project root
+project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 # Test colorama import
