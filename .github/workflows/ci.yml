@@ -18,7 +18,7 @@ jobs:
           cache: "pip"
 
       - name: Install package
-        run: pip install -e .
+        run: pip install -e ".[dev]"
 
       - name: Run tests
         # No API keys or QDRANT_URL are configured here on purpose: the suite is
