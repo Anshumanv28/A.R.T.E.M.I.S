@@ -27,6 +27,29 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# Recent conversation context for routing: without this, a follow-up like
+# "What is my name?" is routed blind to the fact that the answer was already
+# given in the previous turn, and the router can nondeterministically send it
+# to rag_search instead of direct. Same truncation as planner_node/
+# direct_answer_node's own _format_message_history.
+_MAX_MESSAGE_HISTORY = 4
+_MAX_ASSISTANT_CHARS = 400
+
+
+def _format_message_history(history: Optional[list]) -> str:
+    """Format message_history for the routing prompt. Uses last N messages, truncates long assistant replies."""
+    if not history:
+        return ""
+    take = history[-_MAX_MESSAGE_HISTORY:]
+    lines = []
+    for m in take:
+        role = (m.get("role") or "user").lower()
+        content = (m.get("content") or "").strip()
+        if role == "assistant" and len(content) > _MAX_ASSISTANT_CHARS:
+            content = content[:_MAX_ASSISTANT_CHARS].rstrip() + "..."
+        lines.append(f"{role.capitalize()}: {content}")
+    return "Recent conversation:\n" + "\n".join(lines) + "\n\n"
+
 
 class Supervisor:
     """
@@ -120,7 +143,12 @@ class Supervisor:
         "that's good", "sounds good to me", "looks good", "all good", "fine", "done",
     })
 
-    def _route(self, query: str, last_routed_to: Optional[str] = None) -> str:
+    def _route(
+        self,
+        query: str,
+        last_routed_to: Optional[str] = None,
+        message_history: Optional[list] = None,
+    ) -> str:
         q = (query or "").strip().lower()
         if q in self.DIRECT_ACK_PHRASES:
             logger.debug("Supervisor: acknowledgment phrase -> direct (no LLM)")
@@ -142,7 +170,9 @@ class Supervisor:
             "last_routed_to": last_routed_to,
         }
         system_prompt = self._prompt.render_system(context)
-        user_prompt = self._prompt.render_user(query)
+        user_prompt = self._prompt.render_user(
+            query, history=_format_message_history(message_history)
+        )
         try:
             response = self._get_llm_client().generate(
                 system_prompt=system_prompt,
@@ -208,7 +238,7 @@ class Supervisor:
         message_history: Optional[list] = None,
         last_routed_to: Optional[str] = None,
     ) -> AgentState:
-        agent_name = self._route(query, last_routed_to=last_routed_to)
+        agent_name = self._route(query, last_routed_to=last_routed_to, message_history=message_history)
         logger.info("Supervisor routing to: %s", agent_name)
         if agent_name == "direct":
             result = self._direct_answer(query, message_history=message_history)
@@ -230,7 +260,7 @@ class Supervisor:
         message_history: Optional[list] = None,
         last_routed_to: Optional[str] = None,
     ) -> AgentState:
-        agent_name = self._route(query, last_routed_to=last_routed_to)
+        agent_name = self._route(query, last_routed_to=last_routed_to, message_history=message_history)
         logger.info("Supervisor routing to: %s", agent_name)
         if agent_name == "direct":
             result = self._direct_answer(query, message_history=message_history)

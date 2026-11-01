@@ -54,6 +54,9 @@ class SupervisorPrompt(BasePrompt):
         lines.append(
             "- Only route to rag_search, ingestion, or collection_management when the user is asking a question, requesting an action (search, ingest, create collection), or needs information from a tool. Short acknowledgments and affirmations always go to direct."
         )
+        lines.append(
+            "- If the recent conversation below already contains the answer (e.g. the user stated a fact about themselves earlier and is now asking you to recall it, like \"What is my name?\"), route to direct—do NOT search the knowledge base for information the user already gave you in this conversation."
+        )
         lines.append("")
         valid = ", ".join(agent_names)
         lines.append(
@@ -68,7 +71,8 @@ class SupervisorPrompt(BasePrompt):
         query: str,
         tool_calls: list = None,
         prior_context: str = "",
+        history: str = "",
         **kwargs,
     ) -> str:
         """User prompt for supervisor: route to the correct agent. Override, do not inherit base."""
-        return f"Query: {query}\n\nRoute to the correct agent. Respond with JSON only."
+        return f"{history}Query: {query}\n\nRoute to the correct agent. Respond with JSON only."
