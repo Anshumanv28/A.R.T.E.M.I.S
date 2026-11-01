@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ChatPanel } from "./components/ChatPanel";
 import { HealthBadge } from "./components/HealthBadge";
-import { ThemeToggle } from "./components/ThemeToggle";
 import { DashboardPanel } from "./components/dashboard/DashboardPanel";
 
 export default function App() {
@@ -32,7 +31,6 @@ export default function App() {
         </nav>
         <div className="header-controls">
           <HealthBadge />
-          <ThemeToggle />
         </div>
       </header>
       <main>{tab === "chat" ? <ChatPanel /> : <DashboardPanel />}</main>

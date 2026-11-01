@@ -23,7 +23,12 @@ export function TracePanel({ routedTo, toolCalls }: Props) {
     <div className="trace-panel">
       <div className="trace-summary-row">
         {routedTo && <span className="trace-chip">{routedTo}</span>}
-        <button type="button" className="trace-toggle" onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          className="trace-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
           {open ? "Hide trace" : `View trace${calls.length ? ` (${calls.length} tool call${calls.length === 1 ? "" : "s"})` : ""}`}
         </button>
       </div>

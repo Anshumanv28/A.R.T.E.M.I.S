@@ -29,6 +29,7 @@ export function InputBox({ onSend, disabled }: Props) {
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Ask A.R.T.E.M.I.S a question… (Enter to send, Shift+Enter for a new line)"
+        aria-label="Message"
         disabled={disabled}
         rows={2}
       />

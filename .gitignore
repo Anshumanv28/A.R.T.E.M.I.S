@@ -229,6 +229,9 @@ frontend/dist/
 frontend/.next/
 frontend/out/
 
+# design-taste-frontend skill working/inspection output
+frontend/.taste-skill/
+
 # Storybook build outputs
 storybook-static
 

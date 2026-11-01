@@ -27,6 +27,7 @@ export function CollectionsList({ data, error, loading }: Props) {
               <button
                 type="button"
                 className="collection-row-toggle"
+                aria-expanded={expanded === c.name}
                 onClick={() => setExpanded(expanded === c.name ? null : c.name)}
               >
                 <span className="collection-name">{c.name}</span>

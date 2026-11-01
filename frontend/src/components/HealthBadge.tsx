@@ -39,9 +39,11 @@ export function HealthBadge() {
           : `Backend unhealthy${reason ? `: ${reason}` : ""}`;
 
   return (
-    <div className="health-badge" title={label}>
+    <div className="health-badge" role="status" aria-live="polite" aria-label={label} title={label}>
       <span className="health-dot" style={{ backgroundColor: color }} />
-      <span className="health-label">{label}</span>
+      <span className="health-label" aria-hidden="true">
+        {label}
+      </span>
     </div>
   );
 }

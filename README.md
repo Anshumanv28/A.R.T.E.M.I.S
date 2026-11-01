@@ -13,7 +13,7 @@
 
 ## Screenshots
 
-**Chat with Supervisor trace** — a query routed to the `collection_management` sub-agent, with the expanded tool-call trace showing the real `list_collections` result.
+**Chat with Supervisor trace** — a query routed to the `rag_search` sub-agent, with the expanded tool-call trace showing the real retrieval result.
 
 ![Chat with Supervisor trace](docs/screenshots/chat-supervisor-trace.jpg)
 
