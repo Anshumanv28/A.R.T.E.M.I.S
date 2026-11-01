@@ -119,7 +119,7 @@ def test_supervisor_routing_collection_management(live_config, test_registry):
     tool_calls = result.get("tool_calls", [])
     assert len(tool_calls) > 0
     # Expected tool for listing
-    assert any(call.get("name") == "list_collections" for call in tool_calls)
+    assert any(call.get("tool_name") == "list_collections" for call in tool_calls)
 
 def test_supervisor_routing_direct(live_config, test_registry):
     """Supervisor routing — direct"""
