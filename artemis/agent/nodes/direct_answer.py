@@ -21,10 +21,18 @@ logger = get_logger(__name__)
 # asking the agent to do something -- shared so every "answer directly, no
 # tool called" path (Supervisor-level and every sub-agent's own direct branch)
 # gets the same tool-list context instead of only the Supervisor-level one.
+#
+# Must be specific multi-word anchors, not bare words like "available" or
+# "tool": a bare "available" substring-matches ordinary domain questions
+# ("What collections do you have available?"), which wrongly injects the
+# tool-manifest block below into the prompt and has triggered Groq's
+# openai/gpt-oss-120b into emitting a real (unrequested) tool call that the
+# API then rejects with a 400 tool_use_failed error.
 _CAPABILITY_QUESTION_PHRASES = (
-    "tool", "tools", "capabilities", "what can you", "what do you have",
-    "what are your", "how do you work", "what can the system", "available",
-    "list of ", "what options", "what are the ",
+    "what tools", "what tool", "tools do you have", "tools are available",
+    "what capabilities", "your capabilities", "what can you do",
+    "what are your", "how do you work", "what can the system",
+    "list of tools", "what options do you", "what are the tools",
 )
 
 
@@ -42,6 +50,21 @@ def build_capability_tool_summary(registry: ToolRegistry) -> str:
         desc = (t.get("description") or "").strip()
         lines.append(f"- {name}: {desc}")
     return "\n".join(lines)
+
+
+def _is_unrequested_tool_call_error(e: Exception) -> bool:
+    """True for Groq's "model called a tool, but none were offered" 400 (tool_use_failed).
+
+    This generate() call never declares a `tools` param (it's a plain-text completion),
+    so Groq rejects it outright if the model emits a native tool-call in its output --
+    which a tool-trained model (openai/gpt-oss-120b) can do when the prompt contains a
+    block shaped like a tool manifest (e.g. build_capability_tool_summary's output).
+    """
+    body = getattr(e, "body", None)
+    if not isinstance(body, dict):
+        return False
+    error = body.get("error")
+    return isinstance(error, dict) and error.get("code") == "tool_use_failed"
 
 
 # Max chars per document chunk in context to avoid Groq 413 (request too large)
@@ -237,16 +260,41 @@ Provide a comprehensive answer to the query based on the context above."""
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
-        logger.info(f"Generated direct answer ({len(final_answer)} chars)")
-        return {
-            **state,
-            "final_answer": final_answer,
-            "retrieved_docs": state.get("retrieved_docs") or [],
-        }
     except Exception as e:
-        logger.exception(f"Error generating direct answer: {e}")
-        return {
-            **state,
-            "final_answer": f"I encountered an error while generating an answer: {str(e)}",
-            "error": f"Direct answer error: {str(e)}",
-        }
+        if tool_context and _is_unrequested_tool_call_error(e):
+            # A tool-manifest-shaped context block (e.g. the capability tool summary)
+            # pushed a tool-trained model (openai/gpt-oss-120b on Groq) into emitting a
+            # real tool call, which this plain-text generate() call never declared to
+            # the API and Groq rejects. Retry once without that context so the user
+            # still gets an answer instead of a raw API error.
+            logger.warning(
+                "Direct answer: model attempted an unrequested tool call; retrying without tool context"
+            )
+            try:
+                final_answer = llm_client.generate(
+                    system_prompt=load_direct_answer_prompt(with_context=False),
+                    user_prompt=conv_block + ("Query: " + query if conv_block else query),
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+            except Exception as retry_e:
+                logger.exception(f"Error generating direct answer (after retry): {retry_e}")
+                return {
+                    **state,
+                    "final_answer": "I ran into trouble generating an answer just now. Please try rephrasing your question.",
+                    "error": f"Direct answer error: {str(retry_e)}",
+                }
+        else:
+            logger.exception(f"Error generating direct answer: {e}")
+            return {
+                **state,
+                "final_answer": f"I encountered an error while generating an answer: {str(e)}",
+                "error": f"Direct answer error: {str(e)}",
+            }
+
+    logger.info(f"Generated direct answer ({len(final_answer)} chars)")
+    return {
+        **state,
+        "final_answer": final_answer,
+        "retrieved_docs": state.get("retrieved_docs") or [],
+    }
