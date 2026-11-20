@@ -61,7 +61,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 
 - ✅ **File ingestion** — CSV, PDF, DOCX, Markdown, plain text
 - ✅ **Chunking strategies** — fixed, fixed_overlap, csv_row, semantic, agentic (LLM-driven)
-- ✅ **Retrieval** — semantic vector search via Qdrant (keyword/hybrid: planned)
+- ✅ **Retrieval** — semantic, keyword (BM25), and hybrid (semantic + BM25) search via Qdrant, with optional cross-encoder reranking
 - ✅ **Multi-collection** — agent routes between artemis_system_docs and artemis_user_docs by task
 - ✅ **CSV schema converters** — RESTAURANT, TRAVEL schemas
 
@@ -77,6 +77,8 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 
 - ✅ **MCP server** (`artemis/mcp/`) — exposes the same `ToolRegistry` over the Model Context Protocol with least-privilege scopes (`rag_search`, `ingestion`, `collection_mgmt`) that reuse the sub-agents' own tool allow-lists verbatim; requesting an out-of-scope tool returns an explicit error instead of silently succeeding
 - ✅ **Agent eval harness** (`artemis/eval/`, `scripts/eval_agent.py`) — runs a golden dataset end-to-end against the live Supervisor, reporting task success rate, routing/tool-selection accuracy, step count, and per-case token/cost usage; re-run after any planner or prompt change to catch regressions
+- ✅ **Retrieval benchmark** (`scripts/benchmark_retrieval.py`) — compares semantic/keyword/hybrid/hybrid+rerank on Recall@5, Recall@10, and MRR against a labeled dataset, over an embedded in-memory Qdrant instance (no server required); also runs as a CI regression guard (`tests/test_retrieval_benchmark.py`)
+- ✅ **Request-level observability** — per-tool call duration, Supervisor routing vs. agent-execution latency, and token/cost metrics surfaced in the `/query` API response
 - ✅ **Ops dashboard** (Dashboard tab in `frontend/`) — read-only system status, Qdrant collection browser, and eval metrics (success rate, failure breakdown, per-case pass/fail) backed by `GET /status`, `/collections`, `/eval/latest`
 
 ### Also included
@@ -328,8 +330,10 @@ artemis/
         ├── loaders/           # PDF, DOCX, MD, CSV loaders
         └── converters/        # CSV schema converters
 
-scripts/eval_agent.py          # Eval CLI entrypoint
-tests/eval/golden_dataset.json # 8-case golden dataset for the eval harness
+scripts/eval_agent.py              # Agent eval CLI entrypoint
+scripts/benchmark_retrieval.py     # Retrieval-quality benchmark (Recall@K, MRR)
+tests/eval/golden_dataset.json     # 16-case golden dataset for the agent eval harness
+tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval benchmark
 ```
 
 ---
@@ -339,8 +343,8 @@ tests/eval/golden_dataset.json # 8-case golden dataset for the eval harness
 - Integration tests for Supervisor + sub-agents
 - Structure-aware chunking strategy (see #4)
 - Web search sub-agent
-- Keyword + hybrid retrieval (BM25)
-- Conversation memory / multi-turn support
+- Conversation memory
+- Authentication and multi-tenant isolation
 
 ---
 
