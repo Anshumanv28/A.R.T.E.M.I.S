@@ -69,6 +69,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 
 - ✅ **Supervisor** — lightweight LLM router, no tool loop, classifies and dispatches
 - ✅ **SubAgentGraph** — reusable ReAct sub-agent base class, filtered registry per agent
+- ✅ **Four sub-agents**: `rag_search`, `ingestion`, `collection_management`, and `web_search` (public web via Tavily — only registered, and only routable, when `TAVILY_API_KEY` is set; otherwise the Supervisor never offers it as a route)
 - ✅ **SystemContext** — live Qdrant collection metadata injected into each agent's prompt
 - ✅ **run_agent_v2()** — Supervisor entrypoint, backwards-compatible with v1
 - ✅ **--v2 CLI flag** — opt-in to Supervisor architecture
@@ -352,8 +353,8 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 
 - Integration tests for Supervisor + sub-agents
 - Structure-aware chunking strategy (see #4)
-- Web search sub-agent
 - Conversation memory
+- Give web_search a scoped MCP role (currently only `rag_search`/`ingestion`/`collection_mgmt` are exposed over MCP)
 
 ---
 

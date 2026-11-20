@@ -80,6 +80,15 @@ class Supervisor:
         self.agent_descriptions = dict(self.DEFAULT_AGENT_DESCRIPTIONS)
         if agent_descriptions:
             self.agent_descriptions.update(agent_descriptions)
+        if "web_search" not in self.agent_descriptions:
+            try:
+                registry.get("web_search")
+            except KeyError:
+                pass
+            else:
+                self.agent_descriptions["web_search"] = (
+                    "Search the public web for current events, recent news, or facts not in the knowledge base."
+                )
         self._prompt = SupervisorPrompt()
         # Lazy: sub-agents are built on first use, not up front.
         self._agents: Dict[str, SubAgentGraph] = dict(agents) if agents else {}
@@ -110,11 +119,13 @@ class Supervisor:
             build_collection_agent,
             build_ingestion_agent,
             build_rag_agent,
+            build_web_search_agent,
         )
         builders = {
             "rag_search": build_rag_agent,
             "ingestion": build_ingestion_agent,
             "collection_management": build_collection_agent,
+            "web_search": build_web_search_agent,
         }
         builder = builders.get(name)
         if not builder:

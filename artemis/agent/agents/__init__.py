@@ -2,6 +2,7 @@ from artemis.agent.agents.base import SubAgentGraph, _filter_registry
 from artemis.agent.agents.rag_agent import build_rag_agent, RAG_AGENT_TOOLS
 from artemis.agent.agents.ingestion_agent import build_ingestion_agent, INGESTION_AGENT_TOOLS
 from artemis.agent.agents.collection_agent import build_collection_agent, COLLECTION_AGENT_TOOLS
+from artemis.agent.agents.web_search_agent import build_web_search_agent, WEB_SEARCH_AGENT_TOOLS
 
 __all__ = [
     "SubAgentGraph",
@@ -9,7 +10,9 @@ __all__ = [
     "build_rag_agent",
     "build_ingestion_agent",
     "build_collection_agent",
+    "build_web_search_agent",
     "RAG_AGENT_TOOLS",
     "INGESTION_AGENT_TOOLS",
     "COLLECTION_AGENT_TOOLS",
+    "WEB_SEARCH_AGENT_TOOLS",
 ]

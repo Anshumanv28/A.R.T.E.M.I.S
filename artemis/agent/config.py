@@ -32,7 +32,8 @@ class AgentConfig:
     
     groq_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
-    
+    tavily_api_key: Optional[str] = None  # optional: enables the web_search sub-agent when set
+
     def __post_init__(self):
         """Load API keys from environment if not provided."""
         if self.provider == "groq" and not self.groq_api_key:
@@ -50,6 +51,11 @@ class AgentConfig:
                     "OPENAI_API_KEY not found in environment. "
                     "Set it in .env or pass openai_api_key parameter."
                 )
+
+        if not self.tavily_api_key:
+            # Optional: unlike groq/openai keys, missing this just means the
+            # web_search sub-agent isn't registered -- no error.
+            self.tavily_api_key = os.getenv("TAVILY_API_KEY")
     
     @classmethod
     def from_env(cls, **kwargs) -> "AgentConfig":
@@ -71,4 +77,5 @@ class AgentConfig:
             max_tool_steps=int(kwargs.get("max_tool_steps", os.getenv("ARTEMIS_MAX_TOOL_STEPS", "10"))),
             groq_api_key=kwargs.get("groq_api_key"),
             openai_api_key=kwargs.get("openai_api_key"),
+            tavily_api_key=kwargs.get("tavily_api_key"),
         )

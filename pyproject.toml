@@ -17,6 +17,8 @@ dependencies = [
     # LLM providers
     "groq>=0.4.0",
     "openai>=1.0.0",
+    # Web search tool (Tavily)
+    "requests>=2.31.0",
     # Data
     "kagglehub>=0.2.0",
     "pandas>=2.0.0",

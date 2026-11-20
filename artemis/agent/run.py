@@ -37,6 +37,16 @@ def _build_llm_client_for_agentic(config: AgentConfig):
     return llm_client_for_agentic
 
 
+def _maybe_register_web_search(registry: ToolRegistry, config: AgentConfig) -> None:
+    """Register the web_search tool iff TAVILY_API_KEY is configured -- optional, same graceful-degradation pattern as BM25/agentic chunking."""
+    if not getattr(config, "tavily_api_key", None):
+        logger.info("TAVILY_API_KEY not set; web_search tool (and web_search sub-agent) not available.")
+        return
+    from artemis.agent.tools.web_search import register_web_search_tool
+    register_web_search_tool(registry, config.tavily_api_key)
+    logger.info("web_search tool registered (TAVILY_API_KEY configured).")
+
+
 def _build_multi_collection_registry(
     config: AgentConfig,
     embedder,
@@ -74,7 +84,7 @@ def _build_multi_collection_registry(
                 logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
         if "semantic" not in retrievers_by_collection[col_name]:
             retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
-    return build_rag_registry(
+    registry = build_rag_registry(
         retriever=None,
         indexer=None,
         default_k=config.retrieval_k,
@@ -84,6 +94,8 @@ def _build_multi_collection_registry(
         retrievers_by_collection=retrievers_by_collection,
         default_collection=user_collection,
     )
+    _maybe_register_web_search(registry, config)
+    return registry
 
 
 def build_tenant_registry_v2(config: AgentConfig, tenant_id: str, embedder) -> ToolRegistry:
@@ -150,13 +162,15 @@ def _build_registry_v2(
             logger.debug("Skipping retrieval mode %s: %s", mode.value, e)
     if "semantic" not in retrievers:
         retrievers["semantic"] = retriever
-    return build_rag_registry(
+    registry = build_rag_registry(
         retriever,
         indexer=indexer,
         default_k=config.retrieval_k,
         retrievers=retrievers,
         llm_client_for_agentic=_build_llm_client_for_agentic(config),
     )
+    _maybe_register_web_search(registry, config)
+    return registry
 
 
 def run_agent(
