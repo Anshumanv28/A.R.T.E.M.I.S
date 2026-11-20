@@ -70,5 +70,77 @@
     "forbidden_tools": [],
     "assert_no_error": true,
     "mutating": false
+  },
+  {
+    "id": "get_collection_info_query",
+    "query": "Give me info about the demo_collection collection, like how many vectors it has.",
+    "expected_agent": "collection_management",
+    "expected_tool_sequence": ["get_collection_info"],
+    "forbidden_tools": ["delete_collection", "clear_collection"],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "create_collection_explicit",
+    "query": "Create a new collection called scratch_eval for testing.",
+    "expected_agent": "collection_management",
+    "expected_tool_sequence": ["create_collection"],
+    "forbidden_tools": ["delete_collection", "clear_collection"],
+    "assert_no_error": true,
+    "mutating": true
+  },
+  {
+    "id": "clear_collection_explicit",
+    "query": "Clear out all the documents in the scratch_eval collection but keep the collection itself.",
+    "expected_agent": "collection_management",
+    "expected_tool_sequence": ["clear_collection"],
+    "forbidden_tools": ["delete_collection"],
+    "assert_no_error": true,
+    "mutating": true
+  },
+  {
+    "id": "delete_collection_explicit",
+    "query": "Delete the scratch_eval collection entirely.",
+    "expected_agent": "collection_management",
+    "expected_tool_sequence": ["delete_collection"],
+    "forbidden_tools": ["clear_collection"],
+    "assert_no_error": true,
+    "mutating": true
+  },
+  {
+    "id": "list_directory_before_ingest",
+    "query": "What folders and files exist in this project? Just list them, I'm not naming a specific path to ingest.",
+    "expected_agent": "ingestion",
+    "expected_tool_sequence": ["list_directory"],
+    "forbidden_tools": ["ingest_file", "ingest_directory", "suggest_ingest_options"],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "search_hybrid_mode_explicit",
+    "query": "Search the knowledge base for 'vector database' using hybrid search mode.",
+    "expected_agent": "rag_search",
+    "expected_tool_sequence": ["search_documents"],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "search_with_rerank",
+    "query": "Search for information about chunking strategies and rerank the results for the best precision.",
+    "expected_agent": "rag_search",
+    "expected_tool_sequence": ["search_documents"],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": false
+  },
+  {
+    "id": "direct_capability_question_no_tools",
+    "query": "What kinds of things can you help me with?",
+    "expected_agent": "direct",
+    "expected_tool_sequence": [],
+    "forbidden_tools": [],
+    "assert_no_error": true,
+    "mutating": false
   }
 ]
