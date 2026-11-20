@@ -8,12 +8,14 @@ from typing import Dict, List, Optional
 from artemis.agent.agents.rag_agent import RAG_AGENT_TOOLS
 from artemis.agent.agents.ingestion_agent import INGESTION_AGENT_TOOLS
 from artemis.agent.agents.collection_agent import COLLECTION_AGENT_TOOLS
+from artemis.agent.agents.web_search_agent import WEB_SEARCH_AGENT_TOOLS
 
 # None means "no filtering" (every tool in the registry).
 MCP_SCOPES: Dict[str, Optional[List[str]]] = {
     "rag_search": RAG_AGENT_TOOLS,
     "ingestion": INGESTION_AGENT_TOOLS,
     "collection_management": COLLECTION_AGENT_TOOLS,
+    "web_search": WEB_SEARCH_AGENT_TOOLS,
     "full": None,
 }
 

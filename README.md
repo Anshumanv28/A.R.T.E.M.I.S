@@ -76,7 +76,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 
 ### Tooling & evaluation
 
-- ✅ **MCP server** (`artemis/mcp/`) — exposes the same `ToolRegistry` over the Model Context Protocol with least-privilege scopes (`rag_search`, `ingestion`, `collection_mgmt`) that reuse the sub-agents' own tool allow-lists verbatim; requesting an out-of-scope tool returns an explicit error instead of silently succeeding
+- ✅ **MCP server** (`artemis/mcp/`) — exposes the same `ToolRegistry` over the Model Context Protocol with least-privilege scopes (`rag_search`, `ingestion`, `collection_management`, `web_search`, `full`) that reuse the sub-agents' own tool allow-lists verbatim; requesting an out-of-scope tool returns an explicit error instead of silently succeeding. `--scope web_search` exposes nothing (not an error) until `TAVILY_API_KEY` is set.
 - ✅ **Agent eval harness** (`artemis/eval/`, `scripts/eval_agent.py`) — runs a golden dataset end-to-end against the live Supervisor, reporting task success rate, routing/tool-selection accuracy, step count, and per-case token/cost usage; re-run after any planner or prompt change to catch regressions
 - ✅ **Retrieval benchmark** (`scripts/benchmark_retrieval.py`) — compares semantic/keyword/hybrid/hybrid+rerank on Recall@5, Recall@10, and MRR against a labeled dataset, over an embedded in-memory Qdrant instance (no server required); also runs as a CI regression guard (`tests/test_retrieval_benchmark.py`)
 - ✅ **Request-level observability** — per-tool call duration, Supervisor routing vs. agent-execution latency, and token/cost metrics surfaced in the `/query` API response
@@ -183,7 +183,8 @@ Exposes the same registry of tools over MCP's stdio transport, scoped per role:
 # Default scope is rag_search; see artemis/mcp/scopes.py for the full list
 python -m artemis.mcp --scope rag_search
 python -m artemis.mcp --scope ingestion
-python -m artemis.mcp --scope collection_mgmt
+python -m artemis.mcp --scope collection_management
+python -m artemis.mcp --scope web_search  # exposes nothing until TAVILY_API_KEY is set
 ```
 
 Point any MCP-compatible client (Claude Desktop, an MCP Inspector, etc.) at this command as a stdio server. Each scope only exposes the tools that scope's sub-agent uses — e.g. `rag_search` never exposes `delete_collection`.
@@ -354,7 +355,6 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 - Integration tests for Supervisor + sub-agents
 - Structure-aware chunking strategy (see #4)
 - Conversation memory
-- Give web_search a scoped MCP role (currently only `rag_search`/`ingestion`/`collection_mgmt` are exposed over MCP)
 
 ---
 
