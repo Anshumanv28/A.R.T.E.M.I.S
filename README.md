@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-> **A multi-agent RAG system that routes natural language queries to specialist agents — search your knowledge base, ingest documents, and manage collections, all via a single interface.**
+> **A multi-agent RAG system that routes natural language queries to specialist agents — search your knowledge base (semantic, keyword, hybrid, or multi-hop graph), ingest documents, search the web, and manage collections, with optional multi-tenant auth and conversation memory, all via a single interface.**
 
 ---
 
@@ -31,7 +31,7 @@
 
 A.R.T.E.M.I.S. is a **Supervisor-based multi-agent RAG framework** built on LangGraph. It takes a user query, classifies it with a lightweight LLM call, and dispatches it to the right specialist agent — each with its own focused toolset and system prompt.
 
-**Three specialist agents, one Supervisor:**
+**Four specialist agents, one Supervisor:**
 
 ```
 User query
@@ -39,18 +39,19 @@ User query
 ▼
 Supervisor ──── single LLM classification call
 │
-├──► rag_search     → semantic search across knowledge base
-├──► ingestion      → ingest documents, URLs, text
-├──► collection_mgmt → create / delete / list Qdrant collections
-└──► direct         → answer directly, no tools needed
+├──► rag_search            → semantic / keyword / hybrid / graph search across knowledge base
+├──► ingestion             → ingest documents, optionally extracting a knowledge graph too
+├──► collection_management → create / delete / list Qdrant collections
+├──► web_search            → search the public web (Tavily) -- only offered when TAVILY_API_KEY is set
+└──► direct                → answer directly, no tools needed
 ```
 
 Each sub-agent runs its own **ReAct loop** (plan → tool → plan → answer) with only the tools it needs — keeping reasoning tight and costs low.
 
-**Extensible by design** — add a new agent (browser, web search, SQL) with one function call:
+**Extensible by design** — `web_search` itself started as exactly this kind of addition (see `artemis/agent/agents/web_search_agent.py` for the full pattern: filtered registry + a focused prompt). Add your own (browser, SQL, ...) the same way:
 
 ```python
-supervisor.register_agent("web_search", build_web_search_agent(...), "Search the web")
+supervisor.register_agent("sql_query", build_sql_agent(config, registry, system_context), "Query the SQL database")
 ```
 
 ---
@@ -61,10 +62,10 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 
 - ✅ **File ingestion** — CSV, PDF, DOCX, Markdown, plain text
 - ✅ **Chunking strategies** — fixed, fixed_overlap, csv_row, semantic, agentic (LLM-driven)
-- ✅ **Retrieval** — semantic, keyword (BM25), hybrid (semantic + BM25), and graph (multi-hop relationship traversal via Neo4j) search, with optional cross-encoder reranking
+- ✅ **Retrieval** — semantic, keyword (BM25), and hybrid (semantic + BM25) search via Qdrant, with optional cross-encoder reranking
 - ✅ **Multi-collection** — agent routes between artemis_system_docs and artemis_user_docs by task
 - ✅ **CSV schema converters** — RESTAURANT, TRAVEL schemas
-- ✅ **GraphRAG** (`artemis/graph/`, optional via `NEO4J_*` env vars) — `ingest_file(extract_graph=true)` runs LLM-based entity/relationship extraction into a Neo4j graph; `search_documents(search_mode="graph")` entity-links the query and traverses up to a few hops, returning multi-hop evidence (e.g. "Team Alpha manages Project Apollo; Project Apollo uses PostgreSQL") in the same `{text, score, metadata}` shape as every other search mode. Graph data is tenant-scoped by property (AuraDB free tier has one database, so isolation is `tenant_id`-filtered, not separate databases). See `scripts/demo_graphrag.py` for a worked example reproducing the multi-hop scenario from the project's own design-review doc.
+- ✅ **GraphRAG** (`artemis/graph/`, optional via `NEO4J_*` env vars) — a fourth `search_mode`, `"graph"`, for multi-hop questions a single chunk can't answer. `ingest_file(extract_graph=true)` runs LLM-based entity/relationship extraction into a Neo4j graph; `search_documents(search_mode="graph")` entity-links the query and traverses a few hops, returning evidence like `"Team Alpha manages Project Apollo; Project Apollo uses PostgreSQL"` in the exact same `{text, score, metadata}` shape as every other search mode. Graph data is tenant-scoped by property (AuraDB free tier has one database, so isolation is `tenant_id`-filtered, not separate databases). See `scripts/demo_graphrag.py` for a worked example reproducing the multi-hop scenario from the project's own design-review doc.
 
 ### Agent layer (v2)
 
@@ -88,7 +89,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 ### Also included
 
 - ✅ **Legacy v1 agent** (AgentGraph, run_agent) — still works, not removed
-- ✅ **Per-agent prompt classes** (RAGSearchPrompt, IngestionPrompt, CollectionManagementPrompt, SupervisorPrompt)
+- ✅ **Per-agent prompt classes** (RAGSearchPrompt, IngestionPrompt, CollectionManagementPrompt, WebSearchPrompt, SupervisorPrompt)
 
 ---
 
@@ -133,6 +134,8 @@ QDRANT_API_KEY=your-qdrant-api-key
 
 - **Cloud (recommended):** sign up at [cloud.qdrant.io](https://cloud.qdrant.io), create a free cluster, copy the URL + API key
 - **Local:** `docker run -p 6333:6333 qdrant/qdrant` then use `QDRANT_URL=http://localhost:6333`
+
+Everything above is required to run at all. Everything else is optional and purely additive — unset, each one just doesn't register its feature; nothing else changes. See `.env.example` for the full list: `TAVILY_API_KEY` (web search), `NEO4J_URI`/`NEO4J_USERNAME`/`NEO4J_PASSWORD` (GraphRAG), `ARTEMIS_API_KEYS` (auth + multi-tenancy), `ARTEMIS_RATE_LIMIT_PER_MINUTE`, `ARTEMIS_MEMORY_DB_PATH` (conversation memory), `ARTEMIS_CORS_ORIGINS`.
 
 ---
 
@@ -400,9 +403,15 @@ See CONTRIBUTING.md once it's added (tracked in #2).
 | Agent orchestration | LangGraph |
 | LLM providers | Groq · OpenAI |
 | Vector database | Qdrant |
+| Graph database | Neo4j (AuraDB free tier or self-hosted) — optional, GraphRAG |
 | Embeddings | Sentence Transformers |
+| Keyword search | BM25 (`rank-bm25`) |
+| Reranking | Cross-encoder (`sentence-transformers`) |
+| Web search | Tavily — optional, `web_search` sub-agent |
+| Conversation memory | SQLite (`artemis/memory.py`) |
+| HTTP API | FastAPI |
 | Tool protocol | MCP (Model Context Protocol) |
-| Agent evaluation | Custom golden-dataset harness (`artemis/eval/`) |
+| Agent evaluation | Custom golden-dataset harness (`artemis/eval/`) + retrieval benchmark (`scripts/benchmark_retrieval.py`) |
 | Code style | Black |
 
 ---
