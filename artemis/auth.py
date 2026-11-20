@@ -1,24 +1,34 @@
 """
-API-key authentication and per-tenant collection-management scoping.
+API-key authentication and per-tenant isolation.
 
 Auth: ARTEMIS_API_KEYS maps API keys to tenant ids. When unset (local dev,
 the existing demo flow), auth is disabled and every request is treated as
-the single "default" tenant -- no behavior change for anyone not opting in.
+the single DEFAULT_TENANT_ID -- no behavior change for anyone not opting in
+(scope_registry_to_tenant and TenantRagRegistryCache both no-op for it).
 
-Tenant isolation covers collection *management* (list/get/create/clear/
-delete), which talks to Qdrant directly by collection name regardless of
-deployment mode (see artemis/rag/tools.py) -- a tenant can list, create,
-inspect, clear, or delete only its own namespaced collections, because the
-underlying Qdrant collection name differs.
+Two layers of isolation for a real (non-default) tenant:
 
-It deliberately does NOT cover search_documents/ingest_file/ingest_directory:
-those are bound to a fixed Retriever/Indexer (or a fixed multi_collection
-dict keyed by literal names like "artemis_system_docs") wired once at app
-startup, not a per-tenant collection chosen per request. Namespacing
-collection_name for those tools would either be silently ignored (single-
-collection mode) or break the multi_collection lookup (dict keys wouldn't
-match the prefixed name). Real tenant isolation of the retrieval/ingestion
-path needs per-tenant indexer/retriever provisioning, which is future work.
+1. Collection *management* (list/get/create/clear/delete) -- scope_registry_to_tenant
+   wraps these to prefix/strip collection_name, since they talk to Qdrant
+   directly by name regardless of deployment mode (see artemis/rag/tools.py).
+   A tenant can list, create, inspect, clear, or delete only its own
+   namespaced collections.
+
+2. Search/ingestion (search_documents/ingest_file/ingest_directory) --
+   TenantRagRegistryCache builds each tenant its own pair of Qdrant
+   collections ("{tenant}__artemis_system_docs"/"{tenant}__artemis_user_docs")
+   via artemis.agent.run.build_tenant_registry_v2, instead of the shared
+   global ones. One Embedder is built once and reused across all tenants
+   (loading the model, not wrapping it in an Indexer/Retriever, is the
+   expensive part); each tenant's own Indexer/Retriever set is cached after
+   first use.
+
+Known limitation: a tenant's ad-hoc create_collection("foo") is isolated as
+real Qdrant state, but search_documents/ingest_file can't route to it --
+both tools only know about the two standard collections baked into their
+registry at build time. That's a pre-existing limitation of the fixed
+multi_collection architecture (it's just as true for the single default
+tenant today), not something introduced by tenant scoping.
 """
 
 import os
@@ -36,7 +46,8 @@ DEFAULT_TENANT_ID = "default"
 TENANT_SEP = "__"
 
 # Collection-management tools that talk to Qdrant directly by name (safe to
-# namespace); search/ingest tools are intentionally excluded -- see module docstring.
+# namespace); search/ingest tools are handled separately by
+# TenantRagRegistryCache -- see module docstring.
 _SCOPED_TOOL_NAMES = {
     "list_collections",
     "get_collection_info",
@@ -114,7 +125,14 @@ def scope_registry_to_tenant(registry: ToolRegistry, tenant_id: str) -> ToolRegi
     Return a new ToolRegistry where collection-management tools operate only
     on `tenant_id`'s own namespaced collections (see module docstring for
     which tools and why). All other tools pass through unchanged.
+
+    No-op when tenant_id is DEFAULT_TENANT_ID (auth disabled): namespacing
+    the default tenant would otherwise hide/retarget pre-existing
+    collections like artemis_system_docs/artemis_user_docs that were never
+    created with any prefix, breaking the no-auth-configured demo flow.
     """
+    if tenant_id == DEFAULT_TENANT_ID:
+        return registry
     scoped = ToolRegistry()
     for meta in registry.list_tools():
         name = meta["name"]
@@ -190,6 +208,33 @@ def build_rate_limiter() -> RateLimiter:
     return RateLimiter(max_requests=max_requests, window_seconds=60.0)
 
 
+class TenantRagRegistryCache:
+    """
+    Lazily builds and caches a full RAG registry per tenant (its own Qdrant
+    collections, not just namespaced collection-management), sharing one
+    Embedder across all tenants. See module docstring.
+    """
+
+    def __init__(self, config):
+        self._config = config
+        self._embedder = None
+        self._registries: Dict[str, ToolRegistry] = {}
+
+    def get(self, tenant_id: str, default_registry: ToolRegistry) -> ToolRegistry:
+        """Returns default_registry unchanged for DEFAULT_TENANT_ID; a cached per-tenant registry otherwise."""
+        if tenant_id == DEFAULT_TENANT_ID:
+            return default_registry
+        if tenant_id not in self._registries:
+            if self._embedder is None:
+                from artemis.rag.core.embedder import Embedder
+                logger.info("Building shared Embedder for per-tenant RAG registries")
+                self._embedder = Embedder()
+            from artemis.agent.run import build_tenant_registry_v2
+            logger.info("Building RAG registry for tenant %r", tenant_id)
+            self._registries[tenant_id] = build_tenant_registry_v2(self._config, tenant_id, self._embedder)
+        return self._registries[tenant_id]
+
+
 __all__ = [
     "DEFAULT_TENANT_ID",
     "parse_api_keys",
@@ -197,4 +242,5 @@ __all__ = [
     "scope_registry_to_tenant",
     "RateLimiter",
     "build_rate_limiter",
+    "TenantRagRegistryCache",
 ]

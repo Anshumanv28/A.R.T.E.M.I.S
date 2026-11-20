@@ -59,11 +59,12 @@ def test_registry(live_config):
 def test_client(live_config, test_registry):
     """Provide a synchronous TestClient for the FastAPI app."""
     # Override the app lifespan state
-    from artemis.auth import build_rate_limiter
+    from artemis.auth import TenantRagRegistryCache, build_rate_limiter
 
     app.state.config = live_config
     app.state.registry = test_registry
     app.state.rate_limiter = build_rate_limiter()
+    app.state.tenant_rag_cache = TenantRagRegistryCache(live_config)
     app.state.ready = True
     
     with TestClient(app) as client:

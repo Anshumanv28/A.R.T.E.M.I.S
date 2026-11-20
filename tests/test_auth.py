@@ -2,10 +2,12 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from artemis.agent.config import AgentConfig
 from artemis.agent.tools.registry import ToolRegistry
 from artemis.auth import (
     DEFAULT_TENANT_ID,
     RateLimiter,
+    TenantRagRegistryCache,
     parse_api_keys,
     require_api_key,
     scope_registry_to_tenant,
@@ -109,6 +111,14 @@ def _build_fake_collection_registry():
     return registry, store
 
 
+def test_scope_registry_is_noop_for_default_tenant():
+    """Regression test: namespacing the default (auth-disabled) tenant would
+    hide pre-existing collections like artemis_system_docs that were never
+    created with a prefix."""
+    registry, _ = _build_fake_collection_registry()
+    assert scope_registry_to_tenant(registry, DEFAULT_TENANT_ID) is registry
+
+
 def test_scope_registry_prefixes_collection_names():
     registry, store = _build_fake_collection_registry()
     scoped = scope_registry_to_tenant(registry, "tenant_a")
@@ -172,3 +182,50 @@ def test_rate_limiter_tracks_tenants_independently():
     limiter = RateLimiter(max_requests=1, window_seconds=60.0)
     limiter.check("tenant_a")
     limiter.check("tenant_b")  # different tenant, independent budget -- should not raise
+
+
+class _FakeEmbedder:
+    """Stands in for the real sentence-transformers model: registry construction
+    never calls encode()/get_dimension(), only Retriever/Indexer __init__ wiring."""
+
+
+@pytest.fixture
+def fake_config(monkeypatch):
+    monkeypatch.setenv("QDRANT_URL", "http://localhost:6333")  # unreachable is fine; construction is lazy
+    return AgentConfig(provider="groq", model_name="x", retrieval_k=5, groq_api_key="fake-key")
+
+
+def test_tenant_rag_cache_is_noop_for_default_tenant(fake_config):
+    cache = TenantRagRegistryCache(fake_config)
+    default_registry = ToolRegistry()
+    assert cache.get(DEFAULT_TENANT_ID, default_registry) is default_registry
+
+
+def test_tenant_rag_cache_builds_distinct_isolated_registries(fake_config, monkeypatch):
+    monkeypatch.setattr("artemis.rag.core.embedder.Embedder", _FakeEmbedder)
+    cache = TenantRagRegistryCache(fake_config)
+    default_registry = ToolRegistry()
+
+    registry_a = cache.get("tenant_a", default_registry)
+    registry_b = cache.get("tenant_b", default_registry)
+
+    assert registry_a is not registry_b
+    assert "search_documents" in [t["name"] for t in registry_a.list_tools()]
+
+    schema_a = registry_a.get("search_documents").parameters_schema
+    schema_b = registry_b.get("search_documents").parameters_schema
+    default_coll_a = schema_a["properties"]["collection_name"]["default"]
+    default_coll_b = schema_b["properties"]["collection_name"]["default"]
+    assert default_coll_a == "tenant_a__artemis_user_docs"
+    assert default_coll_b == "tenant_b__artemis_user_docs"
+    assert default_coll_a != default_coll_b
+
+
+def test_tenant_rag_cache_reuses_registry_on_repeat_calls(fake_config, monkeypatch):
+    monkeypatch.setattr("artemis.rag.core.embedder.Embedder", _FakeEmbedder)
+    cache = TenantRagRegistryCache(fake_config)
+    default_registry = ToolRegistry()
+
+    first = cache.get("tenant_a", default_registry)
+    second = cache.get("tenant_a", default_registry)
+    assert first is second

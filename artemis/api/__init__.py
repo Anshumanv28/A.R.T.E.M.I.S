@@ -14,10 +14,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from artemis.auth import build_rate_limiter, parse_api_keys, require_api_key, scope_registry_to_tenant
+from artemis.auth import (
+    DEFAULT_TENANT_ID,
+    TenantRagRegistryCache,
+    build_rate_limiter,
+    parse_api_keys,
+    require_api_key,
+    scope_registry_to_tenant,
+)
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
+
+
+def _resolve_registry(request: Request, tenant_id: str):
+    """
+    The tenant's full RAG registry (own collections for search/ingest when
+    tenant_id is a real tenant; the shared global registry unchanged for
+    DEFAULT_TENANT_ID), with collection-management tools namespaced on top.
+    """
+    cache = getattr(request.app.state, "tenant_rag_cache", None)
+    base_registry = (
+        cache.get(tenant_id, request.app.state.registry)
+        if cache is not None
+        else request.app.state.registry
+    )
+    return scope_registry_to_tenant(base_registry, tenant_id)
 
 
 class QueryBody(BaseModel):
@@ -40,6 +62,7 @@ async def _lifespan(app: FastAPI):
         app.state.config = config
         app.state.registry = registry
         app.state.rate_limiter = build_rate_limiter()
+        app.state.tenant_rag_cache = TenantRagRegistryCache(config)
         app.state.ready = True
         app.state.ready_reason = None
         if parse_api_keys():
@@ -146,7 +169,7 @@ async def collections(request: Request, tenant_id: str = Depends(require_api_key
         reason = getattr(request.app.state, "ready_reason", "startup failed")
         return JSONResponse(status_code=503, content={"error": reason, "collections": []})
     try:
-        registry = scope_registry_to_tenant(request.app.state.registry, tenant_id)
+        registry = _resolve_registry(request, tenant_id)
         result = registry.get("list_collections").callable()
         purposes = result.get("purposes", {})
         return {
@@ -167,7 +190,7 @@ async def collection_detail(name: str, request: Request, tenant_id: str = Depend
         reason = getattr(request.app.state, "ready_reason", "startup failed")
         return JSONResponse(status_code=503, content={"error": reason})
     try:
-        registry = scope_registry_to_tenant(request.app.state.registry, tenant_id)
+        registry = _resolve_registry(request, tenant_id)
         return registry.get("get_collection_info").callable(collection_name=name)
     except ValueError as e:
         return JSONResponse(status_code=404, content={"error": str(e)})
@@ -248,7 +271,7 @@ async def query(request: Request, body: QueryBody, tenant_id: str = Depends(requ
         from artemis.eval.pricing import estimate_cost
 
         config = request.app.state.config
-        registry = scope_registry_to_tenant(request.app.state.registry, tenant_id)
+        registry = _resolve_registry(request, tenant_id)
         usage_tracker.reset()
         start = time.perf_counter()
         result = run_agent_v2(

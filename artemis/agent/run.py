@@ -19,6 +19,88 @@ SYSTEM_DOCS_COLLECTION = "artemis_system_docs"
 USER_COLLECTION = "artemis_user_docs"
 
 
+def _build_llm_client_for_agentic(config: AgentConfig):
+    llm_client_for_agentic = None
+    try:
+        if config.provider == "groq" and getattr(config, "groq_api_key", None):
+            from artemis.agent.llm.groq_client import GroqClient
+            llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
+        elif config.provider == "openai" and getattr(config, "openai_api_key", None):
+            from artemis.agent.llm.openai_client import OpenAIClient
+            llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
+    except Exception as e:
+        logger.debug("Could not create LLM client for agentic chunking: %s", e)
+    if llm_client_for_agentic is None:
+        logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
+    else:
+        logger.info("Agentic chunking is available (LLM client configured).")
+    return llm_client_for_agentic
+
+
+def _build_multi_collection_registry(
+    config: AgentConfig,
+    embedder,
+    system_collection: str,
+    user_collection: str,
+) -> ToolRegistry:
+    """
+    Build a two-collection (system docs + user docs) RAG registry against the
+    given Qdrant collection names, reusing a caller-supplied Embedder.
+
+    Shared by the global default registry (SYSTEM_DOCS_COLLECTION/
+    USER_COLLECTION) and build_tenant_registry_v2 (tenant-prefixed names),
+    so both get the exact same retrieval/ingestion behavior -- just pointed
+    at different Qdrant collections.
+    """
+    idx_system = Indexer(collection_name=system_collection, embedder=embedder)
+    idx_user = Indexer(collection_name=user_collection, embedder=embedder)
+    indexers = {system_collection: idx_system, user_collection: idx_user}
+    bm25_available = False
+    try:
+        from artemis.rag.strategies.keyword import BM25_AVAILABLE
+        bm25_available = BM25_AVAILABLE
+    except (ImportError, Exception):
+        pass
+    retrievers_by_collection = {}
+    for col_name, idx in indexers.items():
+        retrievers_by_collection[col_name] = {}
+        for mode in RETRIEVAL_STRATEGIES:
+            if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not bm25_available:
+                continue
+            try:
+                r = Retriever(mode=mode, indexer=idx)
+                retrievers_by_collection[col_name][mode.value] = r
+            except Exception as e:
+                logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
+        if "semantic" not in retrievers_by_collection[col_name]:
+            retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
+    return build_rag_registry(
+        retriever=None,
+        indexer=None,
+        default_k=config.retrieval_k,
+        retrievers=None,
+        llm_client_for_agentic=_build_llm_client_for_agentic(config),
+        indexers=indexers,
+        retrievers_by_collection=retrievers_by_collection,
+        default_collection=user_collection,
+    )
+
+
+def build_tenant_registry_v2(config: AgentConfig, tenant_id: str, embedder) -> ToolRegistry:
+    """
+    Build a RAG registry for one tenant, with its own pair of Qdrant
+    collections ("{tenant_id}__artemis_system_docs"/"{tenant_id}__artemis_user_docs")
+    instead of the shared global ones -- so search_documents/ingest_file/
+    ingest_directory are genuinely isolated per tenant, not just collection
+    management. `embedder` should be a single shared Embedder instance reused
+    across all tenants (loading the model is the expensive part, not
+    constructing an Indexer/Retriever around it).
+    """
+    system_collection = f"{tenant_id}__{SYSTEM_DOCS_COLLECTION}"
+    user_collection = f"{tenant_id}__{USER_COLLECTION}"
+    return _build_multi_collection_registry(config, embedder, system_collection, user_collection)
+
+
 def _build_registry_v2(
     config: AgentConfig,
     retriever=None,
@@ -33,52 +115,7 @@ def _build_registry_v2(
         logger.info("Building multi-collection setup (artemis_system_docs + artemis_user_docs)")
         from artemis.rag.core.embedder import Embedder
         embedder = Embedder()
-        idx_system = Indexer(collection_name=SYSTEM_DOCS_COLLECTION, embedder=embedder)
-        idx_user = Indexer(collection_name=USER_COLLECTION, embedder=embedder)
-        indexers = {SYSTEM_DOCS_COLLECTION: idx_system, USER_COLLECTION: idx_user}
-        bm25_available = False
-        try:
-            from artemis.rag.strategies.keyword import BM25_AVAILABLE
-            bm25_available = BM25_AVAILABLE
-        except (ImportError, Exception):
-            pass
-        retrievers_by_collection = {}
-        for col_name, idx in indexers.items():
-            retrievers_by_collection[col_name] = {}
-            for mode in RETRIEVAL_STRATEGIES:
-                if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not bm25_available:
-                    continue
-                try:
-                    r = Retriever(mode=mode, indexer=idx)
-                    retrievers_by_collection[col_name][mode.value] = r
-                except Exception as e:
-                    logger.debug("Skipping %s %s: %s", col_name, mode.value, e)
-            if "semantic" not in retrievers_by_collection[col_name]:
-                retrievers_by_collection[col_name]["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=idx)
-        llm_client_for_agentic = None
-        try:
-            if config.provider == "groq" and getattr(config, "groq_api_key", None):
-                from artemis.agent.llm.groq_client import GroqClient
-                llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
-            elif config.provider == "openai" and getattr(config, "openai_api_key", None):
-                from artemis.agent.llm.openai_client import OpenAIClient
-                llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
-        except Exception as e:
-            logger.debug("Could not create LLM client for agentic chunking: %s", e)
-        if llm_client_for_agentic is None:
-            logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
-        else:
-            logger.info("Agentic chunking is available (LLM client configured).")
-        return build_rag_registry(
-            retriever=None,
-            indexer=None,
-            default_k=config.retrieval_k,
-            retrievers=None,
-            llm_client_for_agentic=llm_client_for_agentic,
-            indexers=indexers,
-            retrievers_by_collection=retrievers_by_collection,
-            default_collection=USER_COLLECTION,
-        )
+        return _build_multi_collection_registry(config, embedder, SYSTEM_DOCS_COLLECTION, USER_COLLECTION)
     # Single-collection path
     if retriever is None:
         if indexer is not None:
@@ -113,26 +150,12 @@ def _build_registry_v2(
             logger.debug("Skipping retrieval mode %s: %s", mode.value, e)
     if "semantic" not in retrievers:
         retrievers["semantic"] = retriever
-    llm_client_for_agentic = None
-    try:
-        if config.provider == "groq" and getattr(config, "groq_api_key", None):
-            from artemis.agent.llm.groq_client import GroqClient
-            llm_client_for_agentic = GroqClient(api_key=config.groq_api_key, model_name=config.model_name)
-        elif config.provider == "openai" and getattr(config, "openai_api_key", None):
-            from artemis.agent.llm.openai_client import OpenAIClient
-            llm_client_for_agentic = OpenAIClient(api_key=config.openai_api_key, model_name=config.model_name)
-    except Exception as e:
-        logger.debug("Could not create LLM client for agentic chunking: %s", e)
-    if llm_client_for_agentic is None:
-        logger.info("Agentic chunking is not available (no LLM client). Use semantic/fixed/fixed_overlap for ingest.")
-    else:
-        logger.info("Agentic chunking is available (LLM client configured).")
     return build_rag_registry(
         retriever,
         indexer=indexer,
         default_k=config.retrieval_k,
         retrievers=retrievers,
-        llm_client_for_agentic=llm_client_for_agentic,
+        llm_client_for_agentic=_build_llm_client_for_agentic(config),
     )
 
 

@@ -79,7 +79,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 - ✅ **Agent eval harness** (`artemis/eval/`, `scripts/eval_agent.py`) — runs a golden dataset end-to-end against the live Supervisor, reporting task success rate, routing/tool-selection accuracy, step count, and per-case token/cost usage; re-run after any planner or prompt change to catch regressions
 - ✅ **Retrieval benchmark** (`scripts/benchmark_retrieval.py`) — compares semantic/keyword/hybrid/hybrid+rerank on Recall@5, Recall@10, and MRR against a labeled dataset, over an embedded in-memory Qdrant instance (no server required); also runs as a CI regression guard (`tests/test_retrieval_benchmark.py`)
 - ✅ **Request-level observability** — per-tool call duration, Supervisor routing vs. agent-execution latency, and token/cost metrics surfaced in the `/query` API response
-- ✅ **API-key auth + tenant-scoped collection management** (`artemis/auth.py`) — optional per-key auth on every endpoint except `/health`, per-tenant namespacing of list/get/create/clear/delete collection operations, and per-tenant rate limiting on `/query`
+- ✅ **API-key auth + multi-tenant isolation** (`artemis/auth.py`) — optional per-key auth on every endpoint except `/health`; per-tenant namespacing of collection management (list/get/create/clear/delete) *and* search/ingestion (each tenant gets its own pair of Qdrant collections, one shared embedding model); per-tenant rate limiting on `/query`
 - ✅ **Ops dashboard** (Dashboard tab in `frontend/`) — read-only system status, Qdrant collection browser, and eval metrics (success rate, failure breakdown, per-case pass/fail) backed by `GET /status`, `/collections`, `/eval/latest`
 
 ### Also included
@@ -166,7 +166,13 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 
 CORS is locked down by default (only `http://localhost:5173`, the Vite dev server, is allowed). To call the API from a browser-based frontend hosted elsewhere, set `ARTEMIS_CORS_ORIGINS` (comma-separated) — see `.env.example`.
 
-**Auth & multi-tenancy** (optional, off by default): set `ARTEMIS_API_KEYS` (see `.env.example`) to require `Authorization: Bearer <key>` or `X-API-Key: <key>` on every endpoint except `/health`, and to isolate each key's collection-management calls (list/get/create/clear/delete) to that key's own namespaced collections — a tenant can never list, inspect, or delete another tenant's collection, since the real Qdrant collection name differs. `POST /query` is also rate-limited per tenant (`ARTEMIS_RATE_LIMIT_PER_MINUTE`, default 30/min). This does **not** yet isolate the `search_documents`/`ingest_file`/`ingest_directory` path itself, which is bound to a fixed Retriever/Indexer at startup rather than a per-request collection — see `artemis/auth.py`'s module docstring for why, and the Roadmap below.
+**Auth & multi-tenancy** (optional, off by default): set `ARTEMIS_API_KEYS` (see `.env.example`) to require `Authorization: Bearer <key>` or `X-API-Key: <key>` on every endpoint except `/health`. Each key maps to its own tenant, fully isolated:
+
+- **Collection management** (list/get/create/clear/delete) is namespaced to that tenant's own collections — a tenant can never list, inspect, or delete another tenant's collection, since the real Qdrant collection name differs.
+- **Search and ingestion** (`search_documents`/`ingest_file`/`ingest_directory`) run against that tenant's own pair of Qdrant collections (`{tenant}__artemis_system_docs`/`{tenant}__artemis_user_docs`), built lazily on first use and cached — not the shared global ones. One embedding model is loaded once and reused across all tenants.
+- `POST /query` is rate-limited per tenant (`ARTEMIS_RATE_LIMIT_PER_MINUTE`, default 30/min).
+
+Known limitation: a tenant's ad-hoc `create_collection("foo")` is real, isolated Qdrant state, but `search_documents`/`ingest_file` can't route to it — both only know about the two standard collections baked into the registry at build time. That's a pre-existing limitation of the fixed two-collection architecture, true for the default tenant too, not something tenant scoping introduced. See `artemis/auth.py`'s module docstring for the full design.
 
 ### Run the MCP server
 
@@ -348,7 +354,7 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 - Structure-aware chunking strategy (see #4)
 - Web search sub-agent
 - Conversation memory
-- Per-tenant retrieval/ingestion isolation (dynamic per-tenant indexer/retriever provisioning, extending the collection-management isolation already shipped — see Auth & multi-tenancy above)
+- Ad-hoc tenant-created collections wired into that tenant's search_documents/ingest_file (currently only the two standard collections are searchable/ingestible per tenant — see Auth & multi-tenancy above)
 
 ---
 
