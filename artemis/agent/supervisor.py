@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from artemis.agent.config import AgentConfig
@@ -238,8 +239,11 @@ class Supervisor:
         message_history: Optional[list] = None,
         last_routed_to: Optional[str] = None,
     ) -> AgentState:
+        route_start = time.perf_counter()
         agent_name = self._route(query, last_routed_to=last_routed_to, message_history=message_history)
+        routing_latency_ms = (time.perf_counter() - route_start) * 1000
         logger.info("Supervisor routing to: %s", agent_name)
+        agent_start = time.perf_counter()
         if agent_name == "direct":
             result = self._direct_answer(query, message_history=message_history)
         else:
@@ -252,7 +256,13 @@ class Supervisor:
                 except Exception:
                     logger.exception("Sub-agent %s failed; falling back to direct answer", agent_name)
                     result = self._direct_answer(query, message_history=message_history)
-        return {**result, "routed_to": agent_name}
+        agent_latency_ms = (time.perf_counter() - agent_start) * 1000
+        return {
+            **result,
+            "routed_to": agent_name,
+            "routing_latency_ms": round(routing_latency_ms, 2),
+            "agent_latency_ms": round(agent_latency_ms, 2),
+        }
 
     async def ainvoke(
         self,
@@ -260,8 +270,11 @@ class Supervisor:
         message_history: Optional[list] = None,
         last_routed_to: Optional[str] = None,
     ) -> AgentState:
+        route_start = time.perf_counter()
         agent_name = self._route(query, last_routed_to=last_routed_to, message_history=message_history)
+        routing_latency_ms = (time.perf_counter() - route_start) * 1000
         logger.info("Supervisor routing to: %s", agent_name)
+        agent_start = time.perf_counter()
         if agent_name == "direct":
             result = self._direct_answer(query, message_history=message_history)
         else:
@@ -274,7 +287,13 @@ class Supervisor:
                 except Exception:
                     logger.exception("Sub-agent %s failed; falling back to direct answer", agent_name)
                     result = self._direct_answer(query, message_history=message_history)
-        return {**result, "routed_to": agent_name}
+        agent_latency_ms = (time.perf_counter() - agent_start) * 1000
+        return {
+            **result,
+            "routed_to": agent_name,
+            "routing_latency_ms": round(routing_latency_ms, 2),
+            "agent_latency_ms": round(agent_latency_ms, 2),
+        }
 
     def register_agent(
         self,

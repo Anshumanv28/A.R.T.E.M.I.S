@@ -4,6 +4,7 @@ HTTP API for ARTEMIS: same config and agent as the CLI, separate entrypoint.
 
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
@@ -231,19 +232,40 @@ async def query(request: Request, body: QueryBody):
             content={"error": reason, "final_answer": None, "routed_to": None},
         )
     try:
+        from artemis.agent.llm import usage_tracker
         from artemis.agent.run import run_agent_v2
+        from artemis.eval.pricing import estimate_cost
 
+        config = request.app.state.config
+        usage_tracker.reset()
+        start = time.perf_counter()
         result = run_agent_v2(
             body.query,
-            config=request.app.state.config,
+            config=config,
             registry=request.app.state.registry,
             message_history=body.message_history,
         )
+        total_latency_ms = (time.perf_counter() - start) * 1000
+        usage = usage_tracker.snapshot()
+        cost_usd = estimate_cost(config.model_name, usage.prompt_tokens, usage.completion_tokens)
+
         return {
             "final_answer": result.get("final_answer"),
             "routed_to": result.get("routed_to"),
             "error": result.get("error"),
             "tool_calls": result.get("tool_calls"),
+            "metrics": {
+                "total_latency_ms": round(total_latency_ms, 2),
+                "routing_latency_ms": result.get("routing_latency_ms"),
+                "agent_latency_ms": result.get("agent_latency_ms"),
+                "provider": config.provider,
+                "model_name": config.model_name,
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.total_tokens,
+                "llm_call_count": usage.call_count,
+                "cost_usd": cost_usd,
+            },
         }
     except Exception as e:
         logger.exception("Query failed: %s", e)

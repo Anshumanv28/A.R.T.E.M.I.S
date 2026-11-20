@@ -5,6 +5,7 @@ Runs the tool selected by the planner (from state), appends result to tool_calls
 with ok flag, increments step_count, and returns state for the next planner step.
 """
 
+import time
 from typing import Any, Dict
 
 from artemis.agent.state import AgentState
@@ -31,7 +32,7 @@ def tool_node(state: AgentState, registry: ToolRegistry) -> AgentState:
     """
     Execute the tool indicated by state (tool_name, tool_args), append to tool_calls, increment step_count.
 
-    Each tool_calls entry is {"tool_name", "arguments", "result", "ok": bool}.
+    Each tool_calls entry is {"tool_name", "arguments", "result", "ok": bool, "duration_ms": float}.
     On exception, result is the error message and ok=False.
     Updates tool_calls_summary with a short summary of all tool calls for direct_answer.
     """
@@ -53,6 +54,8 @@ def tool_node(state: AgentState, registry: ToolRegistry) -> AgentState:
             "arguments": tool_args,
             "result": str(e),
             "ok": False,
+            "duration_ms": 0.0,
+            "result_count": None,
         })
         step_count += 1
         summary_lines = [ _summarize_tool_call(t["tool_name"], t["arguments"], t["result"], t["ok"]) for t in tool_calls ]
@@ -63,6 +66,7 @@ def tool_node(state: AgentState, registry: ToolRegistry) -> AgentState:
             "tool_calls_summary": "\n".join(summary_lines),
         }
 
+    call_start = time.perf_counter()
     try:
         result = descriptor.callable(**tool_args)
         ok = True
@@ -79,12 +83,15 @@ def tool_node(state: AgentState, registry: ToolRegistry) -> AgentState:
         logger.exception(f"Tool {tool_name} failed: {e}")
         result = str(e)
         ok = False
+    duration_ms = (time.perf_counter() - call_start) * 1000
 
     tool_calls.append({
         "tool_name": tool_name,
         "arguments": tool_args,
         "result": result,
         "ok": ok,
+        "duration_ms": round(duration_ms, 2),
+        "result_count": len(result) if isinstance(result, list) else None,
     })
     step_count += 1
     summary_lines = [_summarize_tool_call(t["tool_name"], t["arguments"], t["result"], t["ok"]) for t in tool_calls]
