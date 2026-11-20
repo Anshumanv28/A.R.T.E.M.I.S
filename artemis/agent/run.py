@@ -47,11 +47,35 @@ def _maybe_register_web_search(registry: ToolRegistry, config: AgentConfig) -> N
     logger.info("web_search tool registered (TAVILY_API_KEY configured).")
 
 
+_graph_store_singleton = None  # lazy, shared across every registry (global + all tenants) -- one Neo4j driver
+
+
+def _get_graph_store():
+    """Lazily connect to Neo4j (once) and cache it. None if GraphRAG isn't configured or the connection fails."""
+    global _graph_store_singleton
+    if _graph_store_singleton is None:
+        from artemis.graph.client import get_neo4j_driver, is_graph_configured
+
+        if not is_graph_configured():
+            logger.info("NEO4J_URI/USERNAME/PASSWORD not set; GraphRAG (graph search_mode, extract_graph) not available.")
+            return None
+        from artemis.graph.store import GraphStore
+
+        try:
+            _graph_store_singleton = GraphStore(get_neo4j_driver())
+            logger.info("GraphRAG: connected to Neo4j.")
+        except Exception as e:
+            logger.warning(f"GraphRAG: failed to connect to Neo4j, graph features disabled: {e}")
+            return None
+    return _graph_store_singleton
+
+
 def _build_multi_collection_registry(
     config: AgentConfig,
     embedder,
     system_collection: str,
     user_collection: str,
+    tenant_id: str = "default",
 ) -> ToolRegistry:
     """
     Build a two-collection (system docs + user docs) RAG registry against the
@@ -60,7 +84,8 @@ def _build_multi_collection_registry(
     Shared by the global default registry (SYSTEM_DOCS_COLLECTION/
     USER_COLLECTION) and build_tenant_registry_v2 (tenant-prefixed names),
     so both get the exact same retrieval/ingestion behavior -- just pointed
-    at different Qdrant collections.
+    at different Qdrant collections. tenant_id also scopes graph data
+    (property-based, see artemis/graph/store.py) the same way.
     """
     idx_system = Indexer(collection_name=system_collection, embedder=embedder)
     idx_user = Indexer(collection_name=user_collection, embedder=embedder)
@@ -93,6 +118,8 @@ def _build_multi_collection_registry(
         indexers=indexers,
         retrievers_by_collection=retrievers_by_collection,
         default_collection=user_collection,
+        graph_store=_get_graph_store(),
+        graph_tenant_id=tenant_id,
     )
     _maybe_register_web_search(registry, config)
     return registry
@@ -110,7 +137,7 @@ def build_tenant_registry_v2(config: AgentConfig, tenant_id: str, embedder) -> T
     """
     system_collection = f"{tenant_id}__{SYSTEM_DOCS_COLLECTION}"
     user_collection = f"{tenant_id}__{USER_COLLECTION}"
-    return _build_multi_collection_registry(config, embedder, system_collection, user_collection)
+    return _build_multi_collection_registry(config, embedder, system_collection, user_collection, tenant_id=tenant_id)
 
 
 def _build_registry_v2(
@@ -168,6 +195,8 @@ def _build_registry_v2(
         default_k=config.retrieval_k,
         retrievers=retrievers,
         llm_client_for_agentic=_build_llm_client_for_agentic(config),
+        graph_store=_get_graph_store(),
+        graph_tenant_id="default",
     )
     _maybe_register_web_search(registry, config)
     return registry

@@ -61,9 +61,10 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 
 - ✅ **File ingestion** — CSV, PDF, DOCX, Markdown, plain text
 - ✅ **Chunking strategies** — fixed, fixed_overlap, csv_row, semantic, agentic (LLM-driven)
-- ✅ **Retrieval** — semantic, keyword (BM25), and hybrid (semantic + BM25) search via Qdrant, with optional cross-encoder reranking
+- ✅ **Retrieval** — semantic, keyword (BM25), hybrid (semantic + BM25), and graph (multi-hop relationship traversal via Neo4j) search, with optional cross-encoder reranking
 - ✅ **Multi-collection** — agent routes between artemis_system_docs and artemis_user_docs by task
 - ✅ **CSV schema converters** — RESTAURANT, TRAVEL schemas
+- ✅ **GraphRAG** (`artemis/graph/`, optional via `NEO4J_*` env vars) — `ingest_file(extract_graph=true)` runs LLM-based entity/relationship extraction into a Neo4j graph; `search_documents(search_mode="graph")` entity-links the query and traverses up to a few hops, returning multi-hop evidence (e.g. "Team Alpha manages Project Apollo; Project Apollo uses PostgreSQL") in the same `{text, score, metadata}` shape as every other search mode. Graph data is tenant-scoped by property (AuraDB free tier has one database, so isolation is `tenant_id`-filtered, not separate databases). See `scripts/demo_graphrag.py` for a worked example reproducing the multi-hop scenario from the project's own design-review doc.
 
 ### Agent layer (v2)
 
@@ -202,6 +203,16 @@ python scripts/eval_agent.py --dataset tests/eval/golden_dataset.json
 
 Each run prints task success rate, routing/tool-selection accuracy, step counts, and token/cost totals, then writes a timestamped JSON report to `eval_reports/` (gitignored). The dashboard's Eval card reads the latest report via `GET /eval/latest`.
 
+### Run the GraphRAG demo
+
+Requires a Neo4j instance (free tier at [console.neo4j.io](https://console.neo4j.io) works) — set `NEO4J_URI`/`NEO4J_USERNAME`/`NEO4J_PASSWORD` in `.env` (see `.env.example`):
+
+```bash
+python scripts/demo_graphrag.py
+```
+
+Ingests the exact multi-hop example from this project's own design-review doc (`ARTEMIS_improvements.txt`) into both an in-memory Qdrant and a disposable-tenant Neo4j graph, then runs the same question ("Which services are used by projects managed by teams reporting to Sarah?") against semantic search and graph search side by side — showing graph search actually traces the relationship chain across documents, not just asserting that it should.
+
 ### Live demo
 
 - **Demo base URL:** `http://54.87.62.83:8000`
@@ -215,7 +226,7 @@ The demo is served over **HTTP** (no HTTPS). It is best-effort: the instance may
 
 A React + Vite chat UI lives in `frontend/`. It calls `POST /query` and shows each answer's `routed_to` agent and `tool_calls` as an expandable trace — a visual demo of the Supervisor routing.
 
-A second **Dashboard tab** polls `GET /status`, `/collections`, and `/eval/latest` to show system health, a Qdrant collection browser, and the latest eval run's metrics. It's read-only by design — mutating actions (create/delete/clear a collection) stay chat-only via the `collection_mgmt` agent.
+A second **Dashboard tab** polls `GET /status`, `/collections`, and `/eval/latest` to show system health, a Qdrant collection browser, and the latest eval run's metrics. It's read-only by design — mutating actions (create/delete/clear a collection) stay chat-only via the `collection_management` agent.
 
 ```bash
 cd frontend
@@ -330,12 +341,16 @@ artemis/
 │   │   ├── base.py            # SubAgentGraph + _filter_registry()
 │   │   ├── rag_agent.py       # build_rag_agent()
 │   │   ├── ingestion_agent.py # build_ingestion_agent()
-│   │   └── collection_agent.py# build_collection_agent()
-│   ├── graph.py               # AgentGraph (v1, legacy)
+│   │   ├── collection_agent.py# build_collection_agent()
+│   │   └── web_search_agent.py# build_web_search_agent()
+│   ├── graph.py               # AgentGraph (v1, legacy) -- not related to artemis/graph/ (GraphRAG)
 │   ├── run.py                 # run_agent(), run_agent_v2(), CLI
-│   └── prompts/               # Per-agent prompt classes
-├── mcp/                       # MCP server: scopes.py, adapter.py, server.py (python -m artemis.mcp)
-├── eval/                      # Eval harness: dataset.py, runner.py, metrics.py, report.py
+│   └── prompts/                # Per-agent prompt classes
+├── graph/                      # GraphRAG: client.py, extraction.py, store.py, search.py (optional, NEO4J_* env vars)
+├── auth.py                     # API-key auth, per-tenant isolation, rate limiting
+├── memory.py                   # Server-side conversation memory (SQLite)
+├── mcp/                        # MCP server: scopes.py, adapter.py, server.py (python -m artemis.mcp)
+├── eval/                       # Eval harness: dataset.py, runner.py, metrics.py, report.py, retrieval_metrics.py
 └── rag/
     ├── core/                  # Indexer, Retriever, Embedder
     └── ingestion/
@@ -345,6 +360,7 @@ artemis/
 
 scripts/eval_agent.py              # Agent eval CLI entrypoint
 scripts/benchmark_retrieval.py     # Retrieval-quality benchmark (Recall@K, MRR)
+scripts/demo_graphrag.py           # GraphRAG multi-hop demo (needs NEO4J_* env vars)
 tests/eval/golden_dataset.json     # 16-case golden dataset for the agent eval harness
 tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval benchmark
 ```
@@ -356,6 +372,9 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 - Integration tests for Supervisor + sub-agents
 - Structure-aware chunking strategy (see #4)
 - Summarized/long-term memory (current memory is full raw transcript, capped only by what each prompt truncates to; no cross-conversation recall)
+- GraphRAG: an agentic retrieval planner that chooses vector/graph/hybrid per query and evaluates evidence sufficiency before answering, rather than the agent picking search_mode once per call (see `ARTEMIS_improvements.txt`'s original multi-phase GraphRAG proposal for the full design)
+- GraphRAG: entity resolution beyond exact name match (e.g. "Director Sarah" vs "Sarah Chen" currently extract as distinct entities), and provenance as graph nodes (Document/Chunk) rather than string properties
+- GraphRAG: wire ad-hoc tenant-created collections into graph extraction too (same limitation noted for search_documents/ingest_file above)
 
 ---
 

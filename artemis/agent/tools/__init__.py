@@ -58,6 +58,9 @@ def build_rag_registry(
     indexers=None,
     retrievers_by_collection=None,
     default_collection=None,
+    graph_store=None,
+    graph_tenant_id: str = "default",
+    graph_max_hops: int = 2,
 ):
     """
     Build a ToolRegistry with RAG tools: search_documents (requires retriever or retrievers), ingest_file (if indexer or indexers provided), and collection management.
@@ -67,10 +70,13 @@ def build_rag_registry(
         indexer: Optional Indexer for ingest_file (single-collection mode); if None and indexers is None, ingest_file is not registered.
         default_k: Default number of documents for search_documents.
         retrievers: Optional dict mapping search_mode (str) -> Retriever (single-collection). If provided, search_documents uses search_mode to pick retriever.
-        llm_client_for_agentic: Optional LLM client for agentic chunking.
+        llm_client_for_agentic: Optional LLM client for agentic chunking (also reused for graph entity extraction).
         indexers: Optional dict mapping collection_name -> Indexer. When set with retrievers_by_collection, search and ingest accept collection_name to switch collections.
         retrievers_by_collection: Optional dict mapping collection_name -> { search_mode -> Retriever }. When set with indexers, search_documents uses collection_name then search_mode.
         default_collection: Default collection when using indexers/retrievers_by_collection (e.g. "artemis_user_docs"). Used when the agent omits collection_name.
+        graph_store: Optional GraphStore (artemis.graph). When set, adds "graph" to search_documents's search_mode and extract_graph to ingest_file (GraphRAG; see artemis/graph/__init__.py).
+        graph_tenant_id: Tenant id graph data is scoped under (property-based isolation; see artemis/graph/store.py).
+        graph_max_hops: Max traversal hops for graph-mode search.
 
     Returns:
         ToolRegistry with RAG tools registered; all callables accept **kwargs.
@@ -85,7 +91,42 @@ def build_rag_registry(
         create_collection_tool,
         clear_collection_tool,
         delete_collection_tool,
+        _resolve_path,
     )
+
+    def _maybe_extract_graph(path: str, file_type: str, extract_graph: bool) -> None:
+        """After a file's chunks are in Qdrant, optionally also extract entities/relationships into the graph store."""
+        if not extract_graph:
+            return
+        if graph_store is None:
+            logger.warning("extract_graph=True but no graph store is configured; skipping.")
+            return
+        if llm_client_for_agentic is None:
+            logger.warning("extract_graph=True but no LLM client is available for extraction; skipping.")
+            return
+        from artemis.rag.ingestion.loaders import load_docx_text, load_md_text, load_pdf_text, load_text
+
+        loaders = {"text": load_text, "md": load_md_text, "pdf": load_pdf_text, "docx": load_docx_text}
+        loader = loaders.get(file_type)
+        if loader is None:
+            logger.info(f"extract_graph is not supported for file_type={file_type!r} (csv); skipping.")
+            return
+        try:
+            from artemis.graph.extraction import extract_entities_and_relationships
+
+            path_obj = _resolve_path(path)
+            text = loader(path_obj)
+            graph = extract_entities_and_relationships(text, llm_client_for_agentic)
+            if graph["entities"]:
+                graph_store.upsert_graph(
+                    graph_tenant_id, graph["entities"], graph["relationships"], source_doc=str(path_obj)
+                )
+                logger.info(
+                    f"Graph extraction from {path}: {len(graph['entities'])} entities, "
+                    f"{len(graph['relationships'])} relationships."
+                )
+        except Exception as e:
+            logger.warning(f"Graph extraction failed for {path}: {e}")
 
     def _apply_rerank(query: str, results, k: int, rerank: bool):
         if not rerank or not results or (results and "error" in results[0]):
@@ -96,6 +137,15 @@ def build_rag_registry(
         except Exception as e:
             logger.warning(f"Reranking failed, returning unranked results: {e}")
             return results[:k]
+
+    def _try_graph_mode(mode: str, query: str, k: int):
+        """None if mode isn't "graph" (or graph_store isn't configured) -- caller falls through to its normal strategy."""
+        if mode != "graph":
+            return None
+        if graph_store is None:
+            return [{"error": "Graph search mode is not available (no graph store configured)."}]
+        from artemis.graph.search import graph_search
+        return graph_search(query, graph_store, graph_tenant_id, k=k, max_hops=graph_max_hops)
 
     registry = ToolRegistry()
     multi_collection = indexers is not None and retrievers_by_collection is not None and len(indexers) > 0 and len(retrievers_by_collection) > 0
@@ -114,12 +164,17 @@ def build_rag_registry(
         first_retrievers = next(iter(retrievers_by_collection.values()), {})
         search_mode_enum = sorted(first_retrievers.keys()) if first_retrievers else ["semantic"]
         default_mode = "semantic" if "semantic" in search_mode_enum else (search_mode_enum[0] if search_mode_enum else "semantic")
+        if graph_store is not None:
+            search_mode_enum = sorted(search_mode_enum + ["graph"])
 
         def search_documents(**kwargs):
             q = kwargs.get("query", "")
             k = kwargs.get("k", default_k)
             mode = kwargs.get("search_mode", default_mode)
             rerank = bool(kwargs.get("rerank", False))
+            graph_result = _try_graph_mode(mode, q, k)
+            if graph_result is not None:
+                return _apply_rerank(q, graph_result, k, rerank)
             coll = kwargs.get("collection_name") or default_coll
             by_mode = retrievers_by_collection.get(coll)
             if not by_mode:
@@ -133,12 +188,17 @@ def build_rag_registry(
     elif retrievers is not None and len(retrievers) > 0:
         search_mode_enum = sorted(retrievers.keys())
         default_mode = search_mode_enum[0] if "semantic" not in search_mode_enum else "semantic"
+        if graph_store is not None:
+            search_mode_enum = sorted(search_mode_enum + ["graph"])
 
         def search_documents(**kwargs):
             q = kwargs.get("query", "")
             k = kwargs.get("k", default_k)
             mode = kwargs.get("search_mode", default_mode)
             rerank = bool(kwargs.get("rerank", False))
+            graph_result = _try_graph_mode(mode, q, k)
+            if graph_result is not None:
+                return _apply_rerank(q, graph_result, k, rerank)
             r = retrievers.get(mode)
             if r is None:
                 return [{"error": f"Search mode '{mode}' not available. Use one of: {search_mode_enum}"}]
@@ -146,13 +206,17 @@ def build_rag_registry(
             results = r.retrieve(q, k=fetch_k)
             return _apply_rerank(q, results, k, rerank)
     else:
-        search_mode_enum = ["semantic"]
+        search_mode_enum = ["semantic", "graph"] if graph_store is not None else ["semantic"]
         default_mode = "semantic"
 
         def search_documents(**kwargs):
             q = kwargs.get("query", "")
             k = kwargs.get("k", default_k)
             rerank = bool(kwargs.get("rerank", False))
+            mode = kwargs.get("search_mode", default_mode)
+            graph_result = _try_graph_mode(mode, q, k)
+            if graph_result is not None:
+                return _apply_rerank(q, graph_result, k, rerank)
             fetch_k = max(k * 4, 20) if rerank else k
             results = retriever.retrieve(q, k=fetch_k)
             return _apply_rerank(q, results, k, rerank)
@@ -164,7 +228,7 @@ def build_rag_registry(
             "k": {"type": "integer", "description": "Number of documents to return", "default": default_k},
             "search_mode": {
                 "type": "string",
-                "description": "Search mode: semantic (default), keyword (BM25), or hybrid.",
+                "description": "Search mode: semantic (default), keyword (BM25), hybrid, or graph (multi-hop relationship traversal -- use for questions connecting two or more entities, e.g. 'which services does the team Sarah manages use', not simple fact lookups).",
                 "enum": search_mode_enum,
                 "default": default_mode,
             },
@@ -202,6 +266,7 @@ def build_rag_registry(
         out = {
             "search_modes": search_mode_enum,
             "rerank_available": True,
+            "graph_rag_available": graph_store is not None,
             "chunk_strategies": chunk_strategies,
             "csv_schemas": csv_schemas,
         }
@@ -282,7 +347,7 @@ def build_rag_registry(
                 k = dict(kwargs)
                 if k.get("chunk_strategy") == "agentic" and llm_client_for_agentic is not None:
                     k["llm_client"] = llm_client_for_agentic
-                return ingest_fn(
+                result = ingest_fn(
                     k.get("path", ""),
                     k.get("file_type", "text"),
                     chunk_strategy=k.get("chunk_strategy"),
@@ -291,6 +356,9 @@ def build_rag_registry(
                     schema=k.get("schema"),
                     llm_client=k.get("llm_client"),
                 )
+                if result.get("ok"):
+                    _maybe_extract_graph(k.get("path", ""), k.get("file_type", "text"), bool(k.get("extract_graph", False)))
+                return result
 
             ingest_file_schema = {
                 "type": "object",
@@ -324,7 +392,7 @@ def build_rag_registry(
                 k = dict(kwargs)
                 if k.get("chunk_strategy") == "agentic" and llm_client_for_agentic is not None:
                     k["llm_client"] = llm_client_for_agentic
-                return ingest_fn(
+                result = ingest_fn(
                     k.get("path", ""),
                     k.get("file_type", "text"),
                     chunk_strategy=k.get("chunk_strategy"),
@@ -333,6 +401,9 @@ def build_rag_registry(
                     schema=k.get("schema"),
                     llm_client=k.get("llm_client"),
                 )
+                if result.get("ok"):
+                    _maybe_extract_graph(k.get("path", ""), k.get("file_type", "text"), bool(k.get("extract_graph", False)))
+                return result
 
             ingest_file_schema = {
                 "type": "object",
@@ -355,10 +426,23 @@ def build_rag_registry(
                 "required": ["path", "file_type"],
             }
 
+        ingest_file_description = (
+            "Ingest a file into the knowledge base. file_type: csv, pdf, docx, md, text. "
+            "When multiple collections exist, call list_collections and pass collection_name with "
+            "one of the returned names. Optional: chunk_strategy, chunk_size, overlap; for CSV only: schema."
+        )
+        if graph_store is not None:
+            ingest_file_schema["properties"]["extract_graph"] = {
+                "type": "boolean",
+                "description": "If true, also extract entities and relationships from this document into the knowledge graph, enabling search_mode=graph for multi-hop questions. Not supported for file_type=csv.",
+                "default": False,
+            }
+            ingest_file_description += " Optional: extract_graph=true to also populate the knowledge graph for multi-hop (graph search_mode) questions."
+
         registry.register(
             "ingest_file",
             ingest_file_kw,
-            description="Ingest a file into the knowledge base. file_type: csv, pdf, docx, md, text. When multiple collections exist, call list_collections and pass collection_name with one of the returned names. Optional: chunk_strategy, chunk_size, overlap; for CSV only: schema.",
+            description=ingest_file_description,
             parameters_schema=ingest_file_schema,
         )
 

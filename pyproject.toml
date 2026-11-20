@@ -10,6 +10,8 @@ dependencies = [
     "langgraph>=0.0.1",
     # Vector database
     "qdrant-client>=1.7.0",
+    # Graph database (GraphRAG, optional via NEO4J_* env vars)
+    "neo4j>=5.0.0",
     # Embeddings
     "sentence-transformers>=2.2.0",
     # Keyword/hybrid retrieval (BM25)
