@@ -7,6 +7,9 @@ import os
 from typing import Dict
 
 from artemis.agent.tools.registry import ToolDescriptor, ToolRegistry
+from artemis.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def _collection_purposes_path() -> str:
@@ -84,6 +87,16 @@ def build_rag_registry(
         delete_collection_tool,
     )
 
+    def _apply_rerank(query: str, results, k: int, rerank: bool):
+        if not rerank or not results or (results and "error" in results[0]):
+            return results[:k] if isinstance(results, list) else results
+        try:
+            from artemis.rag.core.reranker import get_reranker
+            return get_reranker().rerank(query, results, top_k=k)
+        except Exception as e:
+            logger.warning(f"Reranking failed, returning unranked results: {e}")
+            return results[:k]
+
     registry = ToolRegistry()
     multi_collection = indexers is not None and retrievers_by_collection is not None and len(indexers) > 0 and len(retrievers_by_collection) > 0
     collection_enum = sorted(indexers.keys()) if multi_collection else None
@@ -106,6 +119,7 @@ def build_rag_registry(
             q = kwargs.get("query", "")
             k = kwargs.get("k", default_k)
             mode = kwargs.get("search_mode", default_mode)
+            rerank = bool(kwargs.get("rerank", False))
             coll = kwargs.get("collection_name") or default_coll
             by_mode = retrievers_by_collection.get(coll)
             if not by_mode:
@@ -113,7 +127,9 @@ def build_rag_registry(
             r = by_mode.get(mode)
             if r is None:
                 return [{"error": f"Search mode '{mode}' not available. Use one of: {search_mode_enum}"}]
-            return r.retrieve(q, k=k)
+            fetch_k = max(k * 4, 20) if rerank else k
+            results = r.retrieve(q, k=fetch_k)
+            return _apply_rerank(q, results, k, rerank)
     elif retrievers is not None and len(retrievers) > 0:
         search_mode_enum = sorted(retrievers.keys())
         default_mode = search_mode_enum[0] if "semantic" not in search_mode_enum else "semantic"
@@ -122,10 +138,13 @@ def build_rag_registry(
             q = kwargs.get("query", "")
             k = kwargs.get("k", default_k)
             mode = kwargs.get("search_mode", default_mode)
+            rerank = bool(kwargs.get("rerank", False))
             r = retrievers.get(mode)
             if r is None:
                 return [{"error": f"Search mode '{mode}' not available. Use one of: {search_mode_enum}"}]
-            return r.retrieve(q, k=k)
+            fetch_k = max(k * 4, 20) if rerank else k
+            results = r.retrieve(q, k=fetch_k)
+            return _apply_rerank(q, results, k, rerank)
     else:
         search_mode_enum = ["semantic"]
         default_mode = "semantic"
@@ -133,7 +152,10 @@ def build_rag_registry(
         def search_documents(**kwargs):
             q = kwargs.get("query", "")
             k = kwargs.get("k", default_k)
-            return retriever.retrieve(q, k=k)
+            rerank = bool(kwargs.get("rerank", False))
+            fetch_k = max(k * 4, 20) if rerank else k
+            results = retriever.retrieve(q, k=fetch_k)
+            return _apply_rerank(q, results, k, rerank)
 
     search_schema = {
         "type": "object",
@@ -145,6 +167,11 @@ def build_rag_registry(
                 "description": "Search mode: semantic (default), keyword (BM25), or hybrid.",
                 "enum": search_mode_enum,
                 "default": default_mode,
+            },
+            "rerank": {
+                "type": "boolean",
+                "description": "If true, overfetch candidates and reorder them with a cross-encoder relevance model before returning the top k. Improves precision at a small latency cost; use for queries where ranking quality matters (e.g. ambiguous or multi-term questions).",
+                "default": False,
             },
         },
         "required": ["query"],
@@ -158,12 +185,12 @@ def build_rag_registry(
     registry.register(
         "search_documents",
         search_documents,
-        description="Search the knowledge base for relevant documents. Returns a list of {text, score, metadata}. When multiple collections exist, call list_collections and pass collection_name with one of the returned names. Optional search_mode: semantic (default), keyword, hybrid.",
+        description="Search the knowledge base for relevant documents. Returns a list of {text, score, metadata}. When multiple collections exist, call list_collections and pass collection_name with one of the returned names. Optional search_mode: semantic (default), keyword, hybrid. Optional rerank: true to reorder results with a cross-encoder for better precision.",
         parameters_schema=search_schema,
     )
 
     def get_rag_options(**kwargs):
-        """Return available RAG options (search modes, chunk strategies, CSV schemas, and collections when multi-collection) for the agent to answer questions about capabilities."""
+        """Return available RAG options (search modes, rerank availability, chunk strategies, CSV schemas, and collections when multi-collection) for the agent to answer questions about capabilities."""
         try:
             from artemis.rag.ingestion.chunkers.registry import CHUNKERS
             from artemis.rag.ingestion.converters.csv_converter import CSV_CONVERTERS, DocumentSchema
@@ -174,6 +201,7 @@ def build_rag_registry(
             csv_schemas = []
         out = {
             "search_modes": search_mode_enum,
+            "rerank_available": True,
             "chunk_strategies": chunk_strategies,
             "csv_schemas": csv_schemas,
         }
