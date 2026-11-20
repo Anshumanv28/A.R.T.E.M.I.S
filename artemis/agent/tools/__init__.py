@@ -205,8 +205,8 @@ def build_rag_registry(
             "chunk_strategies": chunk_strategies,
             "csv_schemas": csv_schemas,
         }
-        if multi_collection and collection_enum:
-            out["collections"] = collection_enum
+        if multi_collection:
+            out["collections"] = sorted(indexers.keys())  # live, not the snapshot taken at registry-build time
             out["collection_usage"] = "Use list_collections to see available collection names; use the one for system/docs when answering about this system, the one for user data for user content."
         return out
 
@@ -491,6 +491,53 @@ def build_rag_registry(
         },
     )
 
+    def _wire_collection_for_search(name: str) -> None:
+        """
+        After create_collection makes `name` real in Qdrant, also give it an
+        Indexer + Retriever set and add it to the live indexers/retrievers_by_collection
+        dicts so search_documents/ingest_file/ingest_directory can address it
+        by name immediately -- those closures capture these dicts by
+        reference, so mutating them here is visible to calls made right after.
+
+        Only applies in multi-collection mode; single-collection deployments
+        have no notion of collection_name for search/ingest at all.
+        """
+        if not multi_collection or name in indexers:
+            return
+        try:
+            embedder = next(iter(indexers.values())).embedder
+            from artemis.rag.core.indexer import Indexer
+            from artemis.rag.core.retriever import Retriever, RetrievalMode, RETRIEVAL_STRATEGIES
+            from artemis.rag.strategies.keyword import BM25_AVAILABLE
+
+            new_idx = Indexer(collection_name=name, embedder=embedder)
+            indexers[name] = new_idx
+            by_mode = {}
+            for mode in RETRIEVAL_STRATEGIES:
+                if mode in (RetrievalMode.KEYWORD, RetrievalMode.HYBRID) and not BM25_AVAILABLE:
+                    continue
+                try:
+                    by_mode[mode.value] = Retriever(mode=mode, indexer=new_idx)
+                except Exception as e:
+                    logger.debug("Skipping %s %s for newly created collection: %s", name, mode.value, e)
+            if "semantic" not in by_mode:
+                by_mode["semantic"] = Retriever(mode=RetrievalMode.SEMANTIC, indexer=new_idx)
+            retrievers_by_collection[name] = by_mode
+        except Exception as e:
+            logger.warning(f"Collection '{name}' was created but could not be wired for search/ingest: {e}")
+
+    def _unwire_collection_from_search(name: str) -> None:
+        """Undo _wire_collection_for_search after delete_collection, and drop any stale BM25 cache for the name."""
+        if not multi_collection:
+            return
+        indexers.pop(name, None)
+        retrievers_by_collection.pop(name, None)
+        try:
+            from artemis.rag.strategies.keyword import invalidate_bm25_cache
+            invalidate_bm25_cache(name)
+        except Exception:
+            pass
+
     def create_coll(**kwargs):
         name = (kwargs.get("collection_name") or "").strip()
         if not name:
@@ -499,6 +546,8 @@ def build_rag_registry(
             name,
             embedding_dim=kwargs.get("embedding_dim"),
         )
+        if created:
+            _wire_collection_for_search(name)
         # Purpose: from agent (so we remember in later runs), or static default, or generic
         purpose = (kwargs.get("purpose") or "").strip() or COLLECTION_PURPOSES.get(name, "")
         if created and purpose:
@@ -549,10 +598,11 @@ def build_rag_registry(
     )
 
     def delete_coll(**kwargs):
-        return delete_collection_tool(
-            kwargs.get("collection_name", ""),
-            confirm=kwargs.get("confirm", False),
-        )
+        name = kwargs.get("collection_name", "")
+        result = delete_collection_tool(name, confirm=kwargs.get("confirm", False))
+        if result:
+            _unwire_collection_from_search(name)
+        return result
 
     registry.register(
         "delete_collection",

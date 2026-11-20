@@ -172,7 +172,7 @@ CORS is locked down by default (only `http://localhost:5173`, the Vite dev serve
 - **Search and ingestion** (`search_documents`/`ingest_file`/`ingest_directory`) run against that tenant's own pair of Qdrant collections (`{tenant}__artemis_system_docs`/`{tenant}__artemis_user_docs`), built lazily on first use and cached — not the shared global ones. One embedding model is loaded once and reused across all tenants.
 - `POST /query` is rate-limited per tenant (`ARTEMIS_RATE_LIMIT_PER_MINUTE`, default 30/min).
 
-Known limitation: a tenant's ad-hoc `create_collection("foo")` is real, isolated Qdrant state, but `search_documents`/`ingest_file` can't route to it — both only know about the two standard collections baked into the registry at build time. That's a pre-existing limitation of the fixed two-collection architecture, true for the default tenant too, not something tenant scoping introduced. See `artemis/auth.py`'s module docstring for the full design.
+An ad-hoc `create_collection("foo")` is also immediately searchable/ingestible — `create_collection` wires a new Indexer/Retriever into the live registry on the spot, no restart needed; `delete_collection` reverses it. See `artemis/auth.py`'s module docstring for the full tenancy design.
 
 ### Run the MCP server
 
@@ -354,7 +354,6 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 - Structure-aware chunking strategy (see #4)
 - Web search sub-agent
 - Conversation memory
-- Ad-hoc tenant-created collections wired into that tenant's search_documents/ingest_file (currently only the two standard collections are searchable/ingestible per tenant — see Auth & multi-tenancy above)
 
 ---
 

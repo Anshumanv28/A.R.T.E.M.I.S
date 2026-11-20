@@ -22,6 +22,11 @@ logger = get_logger(__name__)
 _bm25_cache: Dict[str, tuple] = {}  # collection_name -> (bm25_index, documents, point_ids)
 
 
+def invalidate_bm25_cache(collection_name: str) -> None:
+    """Drop the cached BM25 index for a collection (e.g. after it's deleted, so a later same-named collection doesn't serve stale results)."""
+    _bm25_cache.pop(collection_name, None)
+
+
 def _get_all_documents_from_qdrant(retriever: Retriever) -> tuple:
     """
     Fetch all documents from Qdrant collection for BM25 indexing.
