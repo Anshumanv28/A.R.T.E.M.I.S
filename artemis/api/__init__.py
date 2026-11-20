@@ -9,11 +9,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from artemis.auth import build_rate_limiter, parse_api_keys, require_api_key, scope_registry_to_tenant
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
@@ -38,9 +39,16 @@ async def _lifespan(app: FastAPI):
         config, registry = get_v2_runtime()
         app.state.config = config
         app.state.registry = registry
+        app.state.rate_limiter = build_rate_limiter()
         app.state.ready = True
         app.state.ready_reason = None
-        logger.info("API startup: config and registry ready")
+        if parse_api_keys():
+            logger.info("API startup: config and registry ready (API key auth enabled)")
+        else:
+            logger.warning(
+                "API startup: config and registry ready (ARTEMIS_API_KEYS not set -- "
+                "auth is disabled, all requests run as the single default tenant)"
+            )
     except Exception as e:
         logger.exception("API startup failed: %s", e)
         app.state.ready = False
@@ -66,7 +74,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     allow_credentials=False,
 )
 
@@ -94,7 +102,7 @@ async def health(request: Request):
 
 
 @app.get("/status")
-async def status(request: Request):
+async def status(request: Request, tenant_id: str = Depends(require_api_key)):
     """Richer dashboard status: readiness, configured LLM provider/model, Qdrant reachability.
 
     provider/model_name reflect what's configured, not a verified-reachable LLM --
@@ -132,13 +140,14 @@ async def status(request: Request):
 
 
 @app.get("/collections")
-async def collections(request: Request):
+async def collections(request: Request, tenant_id: str = Depends(require_api_key)):
     """List Qdrant collections with their recorded purpose, for the dashboard."""
     if not getattr(request.app.state, "ready", False):
         reason = getattr(request.app.state, "ready_reason", "startup failed")
         return JSONResponse(status_code=503, content={"error": reason, "collections": []})
     try:
-        result = request.app.state.registry.get("list_collections").callable()
+        registry = scope_registry_to_tenant(request.app.state.registry, tenant_id)
+        result = registry.get("list_collections").callable()
         purposes = result.get("purposes", {})
         return {
             "collections": [
@@ -152,15 +161,14 @@ async def collections(request: Request):
 
 
 @app.get("/collections/{name}")
-async def collection_detail(name: str, request: Request):
+async def collection_detail(name: str, request: Request, tenant_id: str = Depends(require_api_key)):
     """Per-collection detail (points, vector config, segments) for the dashboard."""
     if not getattr(request.app.state, "ready", False):
         reason = getattr(request.app.state, "ready_reason", "startup failed")
         return JSONResponse(status_code=503, content={"error": reason})
     try:
-        return request.app.state.registry.get("get_collection_info").callable(
-            collection_name=name
-        )
+        registry = scope_registry_to_tenant(request.app.state.registry, tenant_id)
+        return registry.get("get_collection_info").callable(collection_name=name)
     except ValueError as e:
         return JSONResponse(status_code=404, content={"error": str(e)})
     except Exception as e:
@@ -169,7 +177,7 @@ async def collection_detail(name: str, request: Request):
 
 
 @app.get("/eval/latest")
-async def eval_latest(request: Request):
+async def eval_latest(request: Request, tenant_id: str = Depends(require_api_key)):
     """Most recent eval report from eval_reports/ (written by scripts/eval_agent.py), trimmed for the dashboard.
 
     No reports yet is a normal first-run state, not a server error: 404 with
@@ -223,7 +231,7 @@ async def eval_latest(request: Request):
 
 
 @app.post("/query")
-async def query(request: Request, body: QueryBody):
+async def query(request: Request, body: QueryBody, tenant_id: str = Depends(require_api_key)):
     """Run the agent on the given query; optional message_history for multi-turn."""
     if not getattr(request.app.state, "ready", False):
         reason = getattr(request.app.state, "ready_reason", "startup failed")
@@ -231,18 +239,22 @@ async def query(request: Request, body: QueryBody):
             status_code=503,
             content={"error": reason, "final_answer": None, "routed_to": None},
         )
+    rate_limiter = getattr(request.app.state, "rate_limiter", None)
+    if rate_limiter is not None:
+        rate_limiter.check(tenant_id)
     try:
         from artemis.agent.llm import usage_tracker
         from artemis.agent.run import run_agent_v2
         from artemis.eval.pricing import estimate_cost
 
         config = request.app.state.config
+        registry = scope_registry_to_tenant(request.app.state.registry, tenant_id)
         usage_tracker.reset()
         start = time.perf_counter()
         result = run_agent_v2(
             body.query,
             config=config,
-            registry=request.app.state.registry,
+            registry=registry,
             message_history=body.message_history,
         )
         total_latency_ms = (time.perf_counter() - start) * 1000

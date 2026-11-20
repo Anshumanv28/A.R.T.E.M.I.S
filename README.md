@@ -79,6 +79,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 - ✅ **Agent eval harness** (`artemis/eval/`, `scripts/eval_agent.py`) — runs a golden dataset end-to-end against the live Supervisor, reporting task success rate, routing/tool-selection accuracy, step count, and per-case token/cost usage; re-run after any planner or prompt change to catch regressions
 - ✅ **Retrieval benchmark** (`scripts/benchmark_retrieval.py`) — compares semantic/keyword/hybrid/hybrid+rerank on Recall@5, Recall@10, and MRR against a labeled dataset, over an embedded in-memory Qdrant instance (no server required); also runs as a CI regression guard (`tests/test_retrieval_benchmark.py`)
 - ✅ **Request-level observability** — per-tool call duration, Supervisor routing vs. agent-execution latency, and token/cost metrics surfaced in the `/query` API response
+- ✅ **API-key auth + tenant-scoped collection management** (`artemis/auth.py`) — optional per-key auth on every endpoint except `/health`, per-tenant namespacing of list/get/create/clear/delete collection operations, and per-tenant rate limiting on `/query`
 - ✅ **Ops dashboard** (Dashboard tab in `frontend/`) — read-only system status, Qdrant collection browser, and eval metrics (success rate, failure breakdown, per-case pass/fail) backed by `GET /status`, `/collections`, `/eval/latest`
 
 ### Also included
@@ -159,10 +160,13 @@ Or with uvicorn directly:
 uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 ```
 
-- **GET /health** — Returns 200 if the runtime and Qdrant are ready; 503 otherwise.
-- **POST /query** — Body: `{"query": "your question", "message_history": null}`. Optional `message_history` for multi-turn. Returns `{"final_answer", "routed_to", "error", "tool_calls"}`.
+- **GET /health** — Returns 200 if the runtime and Qdrant are ready; 503 otherwise. Unauthenticated (standard for infra probes).
+- **POST /query** — Body: `{"query": "your question", "message_history": null}`. Optional `message_history` for multi-turn. Returns `{"final_answer", "routed_to", "error", "tool_calls", "metrics"}` (metrics: latency, tokens, cost).
+- **GET /status**, **GET /collections**, **GET /collections/{name}**, **GET /eval/latest** — dashboard endpoints.
 
 CORS is locked down by default (only `http://localhost:5173`, the Vite dev server, is allowed). To call the API from a browser-based frontend hosted elsewhere, set `ARTEMIS_CORS_ORIGINS` (comma-separated) — see `.env.example`.
+
+**Auth & multi-tenancy** (optional, off by default): set `ARTEMIS_API_KEYS` (see `.env.example`) to require `Authorization: Bearer <key>` or `X-API-Key: <key>` on every endpoint except `/health`, and to isolate each key's collection-management calls (list/get/create/clear/delete) to that key's own namespaced collections — a tenant can never list, inspect, or delete another tenant's collection, since the real Qdrant collection name differs. `POST /query` is also rate-limited per tenant (`ARTEMIS_RATE_LIMIT_PER_MINUTE`, default 30/min). This does **not** yet isolate the `search_documents`/`ingest_file`/`ingest_directory` path itself, which is bound to a fixed Retriever/Indexer at startup rather than a per-request collection — see `artemis/auth.py`'s module docstring for why, and the Roadmap below.
 
 ### Run the MCP server
 
@@ -344,7 +348,7 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 - Structure-aware chunking strategy (see #4)
 - Web search sub-agent
 - Conversation memory
-- Authentication and multi-tenant isolation
+- Per-tenant retrieval/ingestion isolation (dynamic per-tenant indexer/retriever provisioning, extending the collection-management isolation already shipped — see Auth & multi-tenancy above)
 
 ---
 
