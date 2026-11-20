@@ -1,0 +1,120 @@
+{
+  "corpus": [
+    {"doc_id": "d1", "text": "Project Apollo is managed by Team Alpha, a six-person platform engineering group."},
+    {"doc_id": "d2", "text": "Team Alpha reports to Director Sarah Chen in the Infrastructure organization."},
+    {"doc_id": "d3", "text": "Project Apollo uses PostgreSQL as its primary relational database for order records."},
+    {"doc_id": "d4", "text": "Project Apollo integrates with Service X to process payment webhooks."},
+    {"doc_id": "d5", "text": "Service X occasionally returns error code ERR-4032 when a webhook payload is malformed."},
+    {"doc_id": "d6", "text": "ERR-4032 indicates a signature mismatch between the webhook header and the computed HMAC."},
+    {"doc_id": "d7", "text": "Project Orion is managed by Team Beta and focuses on the recommendation engine."},
+    {"doc_id": "d8", "text": "Team Beta reports to Director Marcus Lee in the Data Science organization."},
+    {"doc_id": "d9", "text": "Project Orion uses a Redis cache in front of its feature store for low-latency lookups."},
+    {"doc_id": "d10", "text": "Qdrant is a vector database used by A.R.T.E.M.I.S. for semantic document retrieval."},
+    {"doc_id": "d11", "text": "BM25 is a keyword-ranking function often used for lexical search over documents."},
+    {"doc_id": "d12", "text": "A cross-encoder reranker scores a query and a candidate document jointly, which is more accurate than comparing independent embeddings."},
+    {"doc_id": "d13", "text": "Kubernetes is a container orchestration system for automating deployment, scaling, and management of containerized applications."},
+    {"doc_id": "d14", "text": "Docker builds container images from a Dockerfile; Kubernetes schedules and runs those images across a cluster."},
+    {"doc_id": "d15", "text": "Hybrid retrieval combines dense vector similarity with sparse keyword matching, often fused with reciprocal rank fusion."},
+    {"doc_id": "d16", "text": "The on-call runbook for ERR-4032 says to check the webhook secret rotation date before escalating to Service X support."},
+    {"doc_id": "d17", "text": "Director Sarah Chen also oversees Team Gamma, which maintains the internal billing pipeline."},
+    {"doc_id": "d18", "text": "Team Gamma's billing pipeline writes invoices to a separate PostgreSQL instance from Project Apollo's."},
+    {"doc_id": "d19", "text": "Recall@K measures the fraction of relevant documents found within the top K retrieved results."},
+    {"doc_id": "d20", "text": "Mean Reciprocal Rank (MRR) rewards retrieval systems that place the first relevant result as high as possible."}
+  ],
+  "queries": [
+    {
+      "id": "q_exact_error_code",
+      "query": "Find the document mentioning error code ERR-4032",
+      "relevant_doc_ids": ["d5", "d6", "d16"],
+      "note": "exact identifier lookup -- keyword/BM25 should have an edge over pure semantic"
+    },
+    {
+      "id": "q_exact_tech_name",
+      "query": "Qdrant",
+      "relevant_doc_ids": ["d10"],
+      "note": "single proper-noun keyword query"
+    },
+    {
+      "id": "q_simple_factual_k8s",
+      "query": "What is Kubernetes?",
+      "relevant_doc_ids": ["d13", "d14"]
+    },
+    {
+      "id": "q_who_manages_apollo",
+      "query": "Who manages Project Apollo?",
+      "relevant_doc_ids": ["d1"]
+    },
+    {
+      "id": "q_multihop_sarah_services",
+      "query": "Which services are used by projects managed by teams reporting to Sarah?",
+      "relevant_doc_ids": ["d1", "d2", "d3", "d4"],
+      "note": "multi-hop; vector/keyword/hybrid without graph traversal are expected to struggle"
+    },
+    {
+      "id": "q_paraphrase_db_choice",
+      "query": "What database does the order-processing project rely on?",
+      "relevant_doc_ids": ["d3"],
+      "note": "paraphrased, no shared keywords with the source doc -- favors semantic/rerank over keyword"
+    },
+    {
+      "id": "q_paraphrase_reranker",
+      "query": "How does a relevance reranking model compare queries and documents?",
+      "relevant_doc_ids": ["d12"]
+    },
+    {
+      "id": "q_webhook_failure_cause",
+      "query": "Why would a payment webhook signature check fail?",
+      "relevant_doc_ids": ["d5", "d6"]
+    },
+    {
+      "id": "q_oncall_runbook",
+      "query": "What should on-call do before escalating an ERR-4032 incident?",
+      "relevant_doc_ids": ["d16"]
+    },
+    {
+      "id": "q_director_marcus",
+      "query": "Who does Team Beta report to?",
+      "relevant_doc_ids": ["d8"]
+    },
+    {
+      "id": "q_recommendation_engine",
+      "query": "Which project is the recommendation engine?",
+      "relevant_doc_ids": ["d7"]
+    },
+    {
+      "id": "q_billing_pipeline_db",
+      "query": "Does the billing pipeline use the same database as Project Apollo?",
+      "relevant_doc_ids": ["d18", "d3"]
+    },
+    {
+      "id": "q_bm25_definition",
+      "query": "What is BM25 used for?",
+      "relevant_doc_ids": ["d11"]
+    },
+    {
+      "id": "q_hybrid_definition",
+      "query": "How does hybrid retrieval combine search methods?",
+      "relevant_doc_ids": ["d15"]
+    },
+    {
+      "id": "q_recall_metric",
+      "query": "What does Recall@K measure in a retrieval evaluation?",
+      "relevant_doc_ids": ["d19"]
+    },
+    {
+      "id": "q_mrr_metric",
+      "query": "Explain Mean Reciprocal Rank.",
+      "relevant_doc_ids": ["d20"]
+    },
+    {
+      "id": "q_redis_cache",
+      "query": "What caching technology does Project Orion use for its feature store?",
+      "relevant_doc_ids": ["d9"]
+    },
+    {
+      "id": "q_docker_vs_k8s",
+      "query": "How do Docker and Kubernetes relate to each other?",
+      "relevant_doc_ids": ["d14"]
+    }
+  ]
+}
