@@ -81,6 +81,7 @@ supervisor.register_agent("web_search", build_web_search_agent(...), "Search the
 - ✅ **Retrieval benchmark** (`scripts/benchmark_retrieval.py`) — compares semantic/keyword/hybrid/hybrid+rerank on Recall@5, Recall@10, and MRR against a labeled dataset, over an embedded in-memory Qdrant instance (no server required); also runs as a CI regression guard (`tests/test_retrieval_benchmark.py`)
 - ✅ **Request-level observability** — per-tool call duration, Supervisor routing vs. agent-execution latency, and token/cost metrics surfaced in the `/query` API response
 - ✅ **API-key auth + multi-tenant isolation** (`artemis/auth.py`) — optional per-key auth on every endpoint except `/health`; per-tenant namespacing of collection management (list/get/create/clear/delete) *and* search/ingestion (each tenant gets its own pair of Qdrant collections, one shared embedding model); per-tenant rate limiting on `/query`
+- ✅ **Conversation memory** (`artemis/memory.py`) — SQLite-backed server-side history keyed by `(tenant_id, conversation_id)`; pass a `conversation_id` back to `/query` to continue a conversation without resending `message_history`, persisted across server restarts
 - ✅ **Ops dashboard** (Dashboard tab in `frontend/`) — read-only system status, Qdrant collection browser, and eval metrics (success rate, failure breakdown, per-case pass/fail) backed by `GET /status`, `/collections`, `/eval/latest`
 
 ### Also included
@@ -162,7 +163,7 @@ uvicorn artemis.api:app --host 0.0.0.0 --port 8000
 ```
 
 - **GET /health** — Returns 200 if the runtime and Qdrant are ready; 503 otherwise. Unauthenticated (standard for infra probes).
-- **POST /query** — Body: `{"query": "your question", "message_history": null}`. Optional `message_history` for multi-turn. Returns `{"final_answer", "routed_to", "error", "tool_calls", "metrics"}` (metrics: latency, tokens, cost).
+- **POST /query** — Body: `{"query": "your question", "message_history": null, "conversation_id": null}`. Pass `message_history` yourself for client-managed multi-turn, *or* pass back the `conversation_id` from a previous response to let the server remember the conversation (SQLite-backed, see `artemis/memory.py`) — once a `conversation_id` is sent, the server's stored history is authoritative and `message_history` is ignored. Returns `{"final_answer", "routed_to", "error", "tool_calls", "conversation_id", "metrics"}` (metrics: latency, tokens, cost).
 - **GET /status**, **GET /collections**, **GET /collections/{name}**, **GET /eval/latest** — dashboard endpoints.
 
 CORS is locked down by default (only `http://localhost:5173`, the Vite dev server, is allowed). To call the API from a browser-based frontend hosted elsewhere, set `ARTEMIS_CORS_ORIGINS` (comma-separated) — see `.env.example`.
@@ -354,7 +355,7 @@ tests/eval/retrieval_dataset.json  # 18-query labeled dataset for the retrieval 
 
 - Integration tests for Supervisor + sub-agents
 - Structure-aware chunking strategy (see #4)
-- Conversation memory
+- Summarized/long-term memory (current memory is full raw transcript, capped only by what each prompt truncates to; no cross-conversation recall)
 
 ---
 

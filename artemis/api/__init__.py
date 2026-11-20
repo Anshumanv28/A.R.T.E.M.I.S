@@ -22,6 +22,7 @@ from artemis.auth import (
     require_api_key,
     scope_registry_to_tenant,
 )
+from artemis.memory import ConversationStore, new_conversation_id
 from artemis.utils import get_logger
 
 logger = get_logger(__name__)
@@ -48,7 +49,13 @@ class QueryBody(BaseModel):
     query: str = Field(..., min_length=1, description="User query")
     message_history: Optional[list[dict[str, Any]]] = Field(
         default=None,
-        description="Optional multi-turn history: list of {role: 'user'|'assistant', content: '...'}",
+        description="Optional multi-turn history: list of {role: 'user'|'assistant', content: '...'}. "
+        "Ignored if conversation_id is set -- the server's stored history takes over.",
+    )
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="Pass back the conversation_id from a previous response to continue that "
+        "conversation using server-persisted history instead of resending message_history.",
     )
 
 
@@ -63,6 +70,7 @@ async def _lifespan(app: FastAPI):
         app.state.registry = registry
         app.state.rate_limiter = build_rate_limiter()
         app.state.tenant_rag_cache = TenantRagRegistryCache(config)
+        app.state.conversation_store = ConversationStore()
         app.state.ready = True
         app.state.ready_reason = None
         if parse_api_keys():
@@ -272,23 +280,38 @@ async def query(request: Request, body: QueryBody, tenant_id: str = Depends(requ
 
         config = request.app.state.config
         registry = _resolve_registry(request, tenant_id)
+
+        conversation_store = getattr(request.app.state, "conversation_store", None)
+        if body.conversation_id and conversation_store is not None:
+            conversation_id = body.conversation_id
+            message_history = conversation_store.get_history(tenant_id, conversation_id)
+        else:
+            conversation_id = new_conversation_id()
+            message_history = body.message_history
+
         usage_tracker.reset()
         start = time.perf_counter()
         result = run_agent_v2(
             body.query,
             config=config,
             registry=registry,
-            message_history=body.message_history,
+            message_history=message_history,
         )
         total_latency_ms = (time.perf_counter() - start) * 1000
         usage = usage_tracker.snapshot()
         cost_usd = estimate_cost(config.model_name, usage.prompt_tokens, usage.completion_tokens)
+
+        if conversation_store is not None:
+            conversation_store.append_turn(tenant_id, conversation_id, "user", body.query)
+            if result.get("final_answer"):
+                conversation_store.append_turn(tenant_id, conversation_id, "assistant", result["final_answer"])
 
         return {
             "final_answer": result.get("final_answer"),
             "routed_to": result.get("routed_to"),
             "error": result.get("error"),
             "tool_calls": result.get("tool_calls"),
+            "conversation_id": conversation_id,
             "metrics": {
                 "total_latency_ms": round(total_latency_ms, 2),
                 "routing_latency_ms": result.get("routing_latency_ms"),
